@@ -33,6 +33,26 @@ jobs:
         working-directory: flutter_app
         run: flutter create --platforms=android .
 
+      - name: Set Android compile SDK
+        working-directory: flutter_app
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_file = Path("android/app/build.gradle")
+          config = gradle_file.read_text()
+          updated, replacements = re.subn(
+              r"compileSdk(?:Version)?\s+flutter\.compileSdkVersion",
+              "compileSdkVersion 35",
+              config,
+              count=1,
+          )
+          if replacements != 1:
+              raise SystemExit("Could not set compileSdk to 35 in android/app/build.gradle")
+          gradle_file.write_text(updated)
+          PY
+
       - name: Install dependencies
         working-directory: flutter_app
         run: flutter pub get

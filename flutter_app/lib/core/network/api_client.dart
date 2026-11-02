@@ -127,18 +127,17 @@ class ApiClient {
   }
 
   Stream<List<int>> _multipartBody(String boundary, Map<String, String> fields, String? filePath, String? fileField, String? fileName) async* {
-    final encoder = utf8.encoder;
     for (final entry in fields.entries) {
-      yield* encoder.bind('--$boundary\r\nContent-Disposition: form-data; name="${entry.key}"\r\n\r\n${entry.value}\r\n');
+      yield utf8.encode('--$boundary\r\nContent-Disposition: form-data; name="${entry.key}"\r\n\r\n${entry.value}\r\n');
     }
     if (filePath != null && fileField != null) {
       final safeName = (fileName ?? File(filePath).uri.pathSegments.last).replaceAll('"', '_');
       final mime = _mimeType(safeName);
-      yield* encoder.bind('--$boundary\r\nContent-Disposition: form-data; name="$fileField"; filename="$safeName"\r\nContent-Type: $mime\r\n\r\n');
+      yield utf8.encode('--$boundary\r\nContent-Disposition: form-data; name="$fileField"; filename="$safeName"\r\nContent-Type: $mime\r\n\r\n');
       yield* File(filePath).openRead();
-      yield* encoder.bind('\r\n');
+      yield utf8.encode('\r\n');
     }
-    yield* encoder.bind('--$boundary--\r\n');
+    yield utf8.encode('--$boundary--\r\n');
   }
 
   String _mimeType(String name) {
