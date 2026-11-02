@@ -43,8 +43,8 @@ jobs:
           gradle_file = Path("android/app/build.gradle")
           config = gradle_file.read_text()
           updated, replacements = re.subn(
-              r"compileSdk(?:Version)?\s+flutter\.compileSdkVersion",
-              "compileSdkVersion 35",
+              r"(?m)^([ \t]*)compileSdk(?:Version)?[ \t]*(?:=[ \t]*)?(?:flutter\.compileSdkVersion|\d+)[ \t]*$",
+              r"\1compileSdkVersion 35",
               config,
               count=1,
           )
