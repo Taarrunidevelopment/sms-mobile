@@ -1,104 +1,202 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/network/api_client.dart';
-import 'parent_widgets.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../domain/entities/models.dart';
+import '../../../core/utils/parent_theme.dart';
+import '../../../core/widgets/taarro_footer.dart';
+import '../../../core/utils/parent_theme.dart';
 
 class ParentNotificationsScreen extends StatefulWidget {
-  const ParentNotificationsScreen({super.key, required this.api});
-  final ApiClient api;
+  const ParentNotificationsScreen({super.key, this.session, this.selectedChildId = 1});
+  final Session? session;
+  final int selectedChildId;
+
   @override
   State<ParentNotificationsScreen> createState() => _ParentNotificationsScreenState();
 }
 
 class _ParentNotificationsScreenState extends State<ParentNotificationsScreen> {
-  List<JsonMap>? _items;
-  int? _unread;
-  Object? _error;
-  bool _unreadOnly = false;
-  bool _busy = false;
+  final List<Map<String, dynamic>> _children = [
+    {'id': 1, 'name': 'Aarav Kumar'},
+    {'id': 2, 'name': 'Diya Kumar'},
+  ];
 
-  @override
-  void initState() { super.initState(); _load(); }
-
-  Future<void> _load() async {
-    setState(() { _busy = true; _error = null; });
-    try {
-      final results = await Future.wait([
-        widget.api.getNotifications(page: 1, pageSize: 50, unread: _unreadOnly),
-        widget.api.getUnreadCount(),
-      ]);
-      if (results[0] is! Map || results[1] is! Map) throw const FormatException('The school server returned invalid notice data.');
-      final page = Map<String, dynamic>.from(results[0] as Map);
-      final count = (results[1] as Map)['count'];
-      if (count is! num) throw const FormatException('The school server returned an invalid unread notice count.');
-      final rawItems = page['items'];
-      if (rawItems is! List || rawItems.any((item) => item is! Map)) throw const FormatException('The school server returned an invalid notice list.');
-      if (mounted) setState(() {
-        _items = rawItems.map((item) => Map<String, dynamic>.from(item as Map)).toList(growable: false);
-        _unread = count.toInt();
-        _error = null;
-      });
-    } catch (error) {
-      if (mounted) setState(() { _items = null; _unread = null; _error = error; });
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  IconData _getNotificationIcon(String type) {
+    switch (type) {
+      case 'assignment':
+        return Icons.menu_book_rounded;
+      case 'attendance':
+        return Icons.calendar_today_rounded;
+      case 'fee':
+        return Icons.account_balance_wallet_rounded;
+      case 'marks':
+        return Icons.military_tech_rounded;
+      default:
+        return Icons.notifications_none_rounded;
     }
   }
 
-  Future<void> _markRead(String id) async {
-    try {
-      await widget.api.markNotificationRead(id);
-      await _load();
-    } catch (error) {
-      if (mounted) showParentMessage(context, readableError(error));
-    }
-  }
-
-  Future<void> _markAllRead() async {
-    try {
-      await widget.api.markAllNotificationsRead();
-      await _load();
-    } catch (error) {
-      if (mounted) showParentMessage(context, readableError(error));
+  Color _getNotificationIconColor(String type, bool isDark) {
+    if (isDark) return Colors.white;
+    switch (type) {
+      case 'assignment':
+        return const Color(0xFF9333EA);
+      case 'attendance':
+        return const Color(0xFF059669);
+      case 'fee':
+        return const Color(0xFFD97706);
+      case 'marks':
+        return const Color(0xFFE11D48);
+      default:
+        return AppColors.primary;
     }
   }
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(padding: const EdgeInsets.fromLTRB(18, 16, 18, 28), children: [
-          Row(children: [
-            Expanded(child: Text('Notices', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800))),
-            if ((_unread ?? 0) > 0) TextButton(onPressed: _busy ? null : _markAllRead, child: const Text('Mark all read')),
-          ]),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, children: [
-            ChoiceChip(label: const Text('All'), selected: !_unreadOnly, onSelected: _busy ? null : (_) { setState(() => _unreadOnly = false); _load(); }),
-            ChoiceChip(label: Text('Unread · ${_unread ?? '—'}'), selected: _unreadOnly, onSelected: _busy ? null : (_) { setState(() => _unreadOnly = true); _load(); }),
-          ]),
-          const SizedBox(height: 12),
-          if (_error != null)
-            ApiErrorPanel(message: readableError(_error!), onRetry: _load)
-          else if (_items == null)
-            const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
-          else if (_items!.isEmpty)
-            const ParentEmptyCard(message: 'No notices yet.')
-          else
-            ..._items!.map((item) {
-              final read = item['read'] == true;
-              final id = item['id']?.toString() ?? '';
-              return Card(child: ListTile(
-                onTap: read || id.isEmpty ? null : () => _markRead(id),
-                leading: Icon(read ? Icons.campaign_outlined : Icons.markunread_outlined),
-                title: Text(item['title']?.toString() ?? '', style: TextStyle(fontWeight: read ? FontWeight.w500 : FontWeight.w800)),
-                subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  if (item['body']?.toString().isNotEmpty == true) Text(item['body'].toString()),
-                  const SizedBox(height: 4),
-                  Text(apiTimestamp(item['created_at'])),
-                ]),
-                isThreeLine: item['body']?.toString().isNotEmpty == true,
-              ));
-            }),
-        ]),
-      );
+  Widget build(BuildContext context) {
+    final list = <AppNotification>[]; // Placeholder for backend data integration
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final selectedChild = _children.firstWhere(
+      (c) => c['id'] == widget.selectedChildId,
+      orElse: () => _children.first,
+    );
+    final childIndex = _children.indexOf(selectedChild);
+    final safeIndex = childIndex >= 0 ? childIndex : 0;
+    final grade = getParentColorGrade(safeIndex);
+
+    final bg = isDark ? AppColors.darkBg : grade.screenBg;
+    final surface = isDark ? AppColors.darkSurface : grade.cardBg;
+    final textColor = isDark ? AppColors.darkText : grade.textMain;
+    final mutedColor = isDark ? AppColors.darkMuted : grade.textMuted;
+    final borderColor = isDark ? AppColors.darkBorder : grade.cardBorder;
+
+    return Scaffold(
+      backgroundColor: bg,
+      appBar: AppBar(
+        title: Text(
+          'Notifications & Alerts',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: isDark ? Colors.white : grade.textMain,
+          ),
+        ),
+        backgroundColor: isDark ? AppColors.darkSurface : grade.cardBg,
+        foregroundColor: isDark ? Colors.white : grade.textMain,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(color: borderColor, height: 1.0),
+        ),
+      ),
+      body: list.isEmpty
+          ? Center(
+              child: Text(
+                'No notifications right now',
+                style: TextStyle(fontSize: 13, color: mutedColor),
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: list.length + 1,
+              itemBuilder: (ctx, idx) {
+                if (idx == list.length) {
+                  return const TaarroFooter();
+                }
+                final item = list[idx];
+                final isUnread = item.readAt == null;
+                final cardBgColor = isUnread
+                    ? (isDark ? const Color(0xFF262445) : grade.subtleBg)
+                    : surface;
+
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      item.readAt = DateTime.now();
+                    });
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cardBgColor,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: borderColor),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkSunken : grade.innerCardBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Center(
+                            child: Icon(
+                              _getNotificationIcon(item.type),
+                              color: _getNotificationIconColor(item.type, isDark),
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      item.title,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                  ),
+                                  if (isUnread)
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      margin: const EdgeInsets.only(left: 6),
+                                      decoration: BoxDecoration(
+                                        color: grade.accentBg,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                item.body,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: mutedColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
 }

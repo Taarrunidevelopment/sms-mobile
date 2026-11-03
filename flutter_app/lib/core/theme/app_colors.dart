@@ -99,4 +99,27 @@ abstract final class AppColors {
     colors: [Color(0xFF5452C8), Color(0xFF7C7BF2)],
   );
 
+  static const teacherHeader = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF1E1D2E), Color(0xFF383556)],
+  );
+
+  static const adminHeader = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF2B2844), Color(0xFF5452C8)],
+  );
+
+  static const accountantHeader = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF19382B), Color(0xFF1A8E63)],
+  );
+
+  static const parentHeader = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF5452C8), Color(0xFF6B5ECC)],
+  );
 }
