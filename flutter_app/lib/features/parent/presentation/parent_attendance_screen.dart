@@ -7,10 +7,11 @@ import '../../../core/widgets/api_loading_skeleton.dart';
 import '../../settings/presentation/account_pages.dart';
 
 class ParentAttendanceScreen extends StatefulWidget {
-  const ParentAttendanceScreen({super.key, required this.children, required this.selectedChildId, required this.onChildSelected});
+  const ParentAttendanceScreen({super.key, required this.children, required this.selectedChildId, required this.onChildSelected, this.showCalendarInitially = false});
   final List<Map<String, dynamic>> children;
   final String selectedChildId;
   final ValueChanged<String> onChildSelected;
+  final bool showCalendarInitially;
 
   @override
   State<ParentAttendanceScreen> createState() => _ParentAttendanceScreenState();
@@ -20,6 +21,8 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen> {
   late DateTime _month;
   late Future<List<dynamic>> _data;
   DateTime? _selectedDate;
+  final GlobalKey _calendarKey = GlobalKey();
+  bool _calendarScrollScheduled = false;
 
   @override
   void initState() {
@@ -53,7 +56,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen> {
 
   Future<void> _openLeaveRequest() async {
     final created = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => LeaveRequestScreen(children: widget.children, selectedChildId: widget.selectedChildId),
+      builder: (_) => LeaveRequestScreen(children: widget.children, selectedChildId: widget.selectedChildId, colorIndex: widget.children.indexWhere((child) => child['id'].toString() == widget.selectedChildId)),
     ));
     if (created == true && mounted) _reload();
   }
@@ -80,10 +83,10 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen> {
     return Column(children: [
       Expanded(child: RefreshIndicator(
         onRefresh: () async => _reload(),
-        child: ListView(padding: const EdgeInsets.fromLTRB(16, 14, 16, 18), children: [
+        child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 18), children: [
           Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Attendance', style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800, color: fg)),
+              Text('Attendance', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: fg, letterSpacing: -0.4)),
               Text(_childName(selectedChild), style: TextStyle(color: muted)),
             ])),
             if (widget.children.length > 1) DropdownButton<String>(
@@ -101,6 +104,15 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen> {
               if (snapshot.hasError) return _errorCard(snapshot.error.toString(), _reload);
               if (snapshot.data == null || snapshot.data!.length != 4 || snapshot.data![0] is! Map || snapshot.data![1] is! List || snapshot.data![2] is! List || snapshot.data![3] is! List) {
                 return _errorCard('The server returned invalid attendance data.', _reload);
+              }
+              if (widget.showCalendarInitially && !_calendarScrollScheduled) {
+                _calendarScrollScheduled = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  final target = _calendarKey.currentContext;
+                  if (mounted && target != null) {
+                    Scrollable.ensureVisible(target, alignment: 0.03, duration: const Duration(milliseconds: 360), curve: Curves.easeOutCubic);
+                  }
+                });
               }
               final attendance = Map<String, dynamic>.from(snapshot.data![0] as Map);
               final events = (snapshot.data![1] as List).whereType<Map>().toList();
@@ -167,7 +179,7 @@ class _ParentAttendanceScreenState extends State<ParentAttendanceScreen> {
     final daysByDate = {for (final item in days) item['date'].toString(): item};
     final today = DateTime.now();
     final todayStatus = todayRecord?['status']?.toString();
-    return Card(color: surface, child: Padding(padding: const EdgeInsets.fromLTRB(12, 9, 12, 14), child: Column(children: [
+    return Card(key: _calendarKey, color: surface, child: Padding(padding: const EdgeInsets.fromLTRB(12, 9, 12, 14), child: Column(children: [
       Row(children: [
         IconButton(visualDensity: VisualDensity.compact, onPressed: () => setState(() { _month = DateTime(_month.year, _month.month - 1); _selectedDate = null; _data = _load(); }), icon: const Icon(Icons.chevron_left)),
         Expanded(child: Text('${_monthName(_month.month)} ${_month.year}', textAlign: TextAlign.center, style: TextStyle(color: fg, fontSize: 16, fontWeight: FontWeight.w800))),

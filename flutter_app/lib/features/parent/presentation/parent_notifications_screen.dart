@@ -50,9 +50,9 @@ class _ParentNotificationsScreenState extends State<ParentNotificationsScreen> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final text = dark ? AppColors.darkInk : AppColors.ink;
     final muted = dark ? AppColors.darkMuted : AppColors.muted;
-    return RefreshIndicator(onRefresh: () async => _reload(), child: ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 32), children: [
+    return RefreshIndicator(onRefresh: () async => _reload(), child: ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 24), children: [
       Row(children: [
-        Expanded(child: Text('Notices', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: text))),
+        Expanded(child: Text('Notices', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: text, letterSpacing: -0.4))),
         TextButton(onPressed: _markAllRead, child: const Text('Mark all read')),
       ]),
       const SizedBox(height: 8),

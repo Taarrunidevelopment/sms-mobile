@@ -25,9 +25,11 @@ class ParentHomeScreen extends ConsumerStatefulWidget {
 class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
   int _tab = 0;
   late String _childId;
+  bool _openCalendarOnAttendance = false;
   String? _moreChildId;
   late Future<dynamic> _today;
   late Future<dynamic> _calendar;
+  late Future<dynamic> _leaveRequests;
   late Future<dynamic> _unread;
   int _unreadCount = 0;
   String? _unreadError;
@@ -50,6 +52,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
   void _refresh() {
     _today = ApiClient.instance.getTodayAttendance();
     _calendar = _loadCalendar();
+    _leaveRequests = _loadLeaveRequests();
     _loadUnread();
   }
 
@@ -59,6 +62,8 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
     final to = _dateKey(today.add(const Duration(days: 90)));
     return ApiClient.instance.getCalendar(_childId, from, to);
   }
+
+  Future<dynamic> _loadLeaveRequests() => ApiClient.instance.getLeaveRequests(_childId);
 
   String _dateKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
@@ -79,7 +84,29 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
 
   Map<String, dynamic> get _child => widget.children.firstWhere((item) => item['id'].toString() == _childId, orElse: () => widget.children.first);
 
-  void _selectTab(int index) => setState(() => _tab = index);
+  void _selectTab(int index) => setState(() {
+        _tab = index;
+        _openCalendarOnAttendance = false;
+        if (index == 0) {
+          _today = ApiClient.instance.getTodayAttendance();
+          _calendar = _loadCalendar();
+          _leaveRequests = _loadLeaveRequests();
+        }
+      });
+
+  void _openCalendarSection() => setState(() {
+        _tab = 1;
+        _openCalendarOnAttendance = true;
+      });
+
+  Future<void> _createLeaveRequest() async {
+    final created = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => LeaveRequestScreen(children: widget.children, selectedChildId: _childId, colorIndex: widget.children.indexWhere((child) => child['id'].toString() == _childId)),
+    ));
+    if (created == true && mounted) {
+      setState(() => _leaveRequests = _loadLeaveRequests());
+    }
+  }
 
   void _refreshUnreadCount() {
     if (mounted) setState(_loadUnread);
@@ -103,10 +130,17 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
     Widget body;
     switch (_tab) {
       case 1:
-        body = ParentAttendanceScreen(children: widget.children, selectedChildId: _childId, onChildSelected: (id) => setState(() {
-          _childId = id;
-          _calendar = _loadCalendar();
-        }));
+        body = ParentAttendanceScreen(
+          key: ValueKey('attendance-$_openCalendarOnAttendance'),
+          children: widget.children,
+          selectedChildId: _childId,
+          showCalendarInitially: _openCalendarOnAttendance,
+          onChildSelected: (id) => setState(() {
+            _childId = id;
+            _calendar = _loadCalendar();
+            _leaveRequests = _loadLeaveRequests();
+          }),
+        );
         break;
       case 2:
         body = ParentNotificationsScreen(onUnreadCountChanged: _refreshUnreadCount);
@@ -114,7 +148,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
       case 3:
         final childIndex = widget.children.indexWhere((child) => child['id'].toString() == _moreChildId);
         body = childIndex >= 0
-            ? ProfileScreen(me: widget.me, child: widget.children[childIndex], colorIndex: childIndex, embedded: true, onBack: () => setState(() => _moreChildId = null))
+            ? ProfileScreen(me: widget.me, child: widget.children[childIndex], colorIndex: childIndex, embedded: true, neutral: true, onBack: () => setState(() => _moreChildId = null))
             : SettingsScreen(me: widget.me, children: widget.children, onLogout: _logout, onSelectChild: (index) => setState(() => _moreChildId = widget.children[index]['id'].toString()));
         break;
       default:
@@ -122,7 +156,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : grade.screenBg,
+      backgroundColor: isDark ? AppColors.darkBg : _tab < 2 ? grade.screenBg : AppColors.bg,
       appBar: AppHeader(
         schoolName: schoolName,
         userName: userName,
@@ -138,7 +172,10 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
         future: unreadFuture,
         builder: (context, snapshot) {
           final unreadCount = snapshot.hasError ? 0 : _number(snapshot.data is Map ? (snapshot.data as Map)['count'] : 0);
-          return NavigationBar(
+          final usesChildColor = _tab < 2;
+          final activeColor = usesChildColor ? grade.accentText : AppColors.primary;
+          final indicatorColor = usesChildColor ? grade.subtleBg : AppColors.primarySoft;
+          final navigation = NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: _selectTab,
             destinations: [
@@ -147,6 +184,22 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
               NavigationDestination(icon: Badge(isLabelVisible: snapshot.hasError || _unreadError != null || unreadCount > 0, label: Text(snapshot.hasError || _unreadError != null ? '!' : unreadCount > 9 ? '9+' : '$unreadCount'), child: const Icon(Icons.campaign_outlined)), selectedIcon: const Icon(Icons.campaign_rounded), label: 'Notices'),
               const NavigationDestination(icon: Icon(Icons.menu_rounded), selectedIcon: Icon(Icons.menu_rounded), label: 'More'),
             ],
+          );
+          if (isDark) return navigation;
+          return NavigationBarTheme(
+            data: NavigationBarThemeData(
+              backgroundColor: AppColors.surface,
+              indicatorColor: indicatorColor,
+              iconTheme: MaterialStateProperty.resolveWith((states) => IconThemeData(
+                    color: states.contains(MaterialState.selected) ? activeColor : AppColors.muted,
+                    size: states.contains(MaterialState.selected) ? 23 : 21,
+                  )),
+              labelTextStyle: MaterialStateProperty.resolveWith((states) => TextStyle(
+                    color: states.contains(MaterialState.selected) ? activeColor : AppColors.muted,
+                    fontWeight: states.contains(MaterialState.selected) ? FontWeight.w800 : FontWeight.w500,
+                  )),
+            ),
+            child: navigation,
           );
         },
       ),
@@ -160,8 +213,8 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
     final muted = dark ? AppColors.darkMuted : grade.textMuted;
     return RefreshIndicator(
       onRefresh: () async => setState(_refresh),
-      child: ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 32), children: [
-        Text('Home', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: text)),
+      child: ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 24), children: [
+        Text('Home', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: text, letterSpacing: -0.5)),
         if (_unreadError != null) ...[const SizedBox(height: 12), _inlineError(_unreadError!)],
         if (!_dismissAlertPrompt) ...[
           const SizedBox(height: 12),
@@ -183,6 +236,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
                 onSelected: (_) => setState(() {
                   _childId = widget.children[i]['id'].toString();
                   _calendar = _loadCalendar();
+                  _leaveRequests = _loadLeaveRequests();
                 }),
                 selectedColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg,
                 labelStyle: TextStyle(color: dark ? AppColors.darkInk : grade.textMain, fontWeight: FontWeight.w700),
@@ -190,22 +244,27 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
           ])),
           const SizedBox(height: 14),
         ],
-        Card(color: surface, child: InkWell(
+        Card(color: dark ? surface : null, clipBehavior: Clip.antiAlias, child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: _openProfile,
-          child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
-            CircleAvatar(radius: 28, backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg, child: Text(_initials(_childName(_child)), style: TextStyle(color: dark ? AppColors.darkPrimary : grade.accentText, fontWeight: FontWeight.w800))),
+          child: Ink(
+            decoration: dark ? null : BoxDecoration(gradient: LinearGradient(colors: grade.heroGradientColors, begin: Alignment.topLeft, end: Alignment.bottomRight)),
+            child: Padding(padding: const EdgeInsets.all(18), child: Row(children: [
+            CircleAvatar(radius: 29, backgroundColor: dark ? AppColors.darkPrimarySoft : Colors.white.withOpacity(0.16), child: Text(_initials(_childName(_child)), style: TextStyle(color: dark ? AppColors.darkPrimary : Colors.white, fontWeight: FontWeight.w900, fontSize: 17))),
             const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(_childName(_child), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: text)),
-              Text(_sectionLabel(_child), style: TextStyle(color: muted)),
+              Text(_childName(_child), style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: dark ? text : Colors.white)),
+              Text(_sectionLabel(_child), style: TextStyle(color: dark ? muted : Colors.white.withOpacity(0.82))),
             ])),
-            Icon(Icons.chevron_right, color: muted),
-          ])),
+            Icon(Icons.chevron_right, color: dark ? muted : Colors.white.withOpacity(0.85)),
+          ]))),
         )),
         const SizedBox(height: 12),
         Card(color: surface, child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text("Today's attendance", style: TextStyle(fontWeight: FontWeight.w700, color: text)),
+          Row(children: [
+            Expanded(child: Text("Today's attendance", style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: text))),
+            TextButton(onPressed: () => _selectTab(1), child: const Text('Attendance')),
+          ]),
           const SizedBox(height: 12),
           FutureBuilder<dynamic>(
             future: _today,
@@ -229,14 +288,56 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
         const SizedBox(height: 12),
         _schoolCalendarCard(text, muted, surface, dark, grade),
         const SizedBox(height: 12),
-        Row(children: [
-          Expanded(child: _actionCard(context, 'Leave requests', Icons.edit_calendar_outlined, () => _selectTab(1), grade)),
-        ]),
+        _leaveRequestsCard(text, muted, surface, dark, grade),
         const SizedBox(height: 24),
         const _SmallFooter(),
       ]),
     );
   }
+
+  Widget _leaveRequestsCard(Color text, Color muted, Color surface, bool dark, ParentColorGrade grade) => Card(
+        color: surface,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text('Leave requests', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: text))),
+              TextButton.icon(onPressed: _createLeaveRequest, icon: const Icon(Icons.add, size: 18), label: const Text('Create leave')),
+            ]),
+            FutureBuilder<dynamic>(
+              future: _leaveRequests,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'inline');
+                if (snapshot.hasError) return _homeLeaveError(_errorMessage(snapshot.error!));
+                if (snapshot.data is! List) return _homeLeaveError('Leave requests returned invalid data.');
+                final requests = (snapshot.data as List).whereType<Map>().toList()
+                  ..sort((a, b) => (b['requested_at']?.toString() ?? '').compareTo(a['requested_at']?.toString() ?? ''));
+                if (requests.isEmpty) return Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('No leave requests yet.', style: TextStyle(color: muted)));
+                final latest = requests.first;
+                final starts = latest['starts_on']?.toString() ?? 'Date unavailable';
+                final ends = latest['ends_on']?.toString() ?? starts;
+                final reason = latest['reason']?.toString().trim() ?? '';
+                final status = latest['status']?.toString() ?? 'unknown';
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg,
+                    child: Icon(Icons.event_note_outlined, color: dark ? AppColors.darkPrimary : grade.accentText),
+                  ),
+                  title: Text('$starts${ends == starts ? '' : ' – $ends'}', style: TextStyle(color: text, fontWeight: FontWeight.w700)),
+                  subtitle: Text('${_humanize(status)}${reason.isEmpty ? '' : ' · $reason'}', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted)),
+                  trailing: Icon(Icons.chevron_right, color: muted),
+                );
+              },
+            ),
+          ]),
+        ),
+      );
+
+  Widget _homeLeaveError(String message) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _inlineError(message),
+        TextButton.icon(onPressed: () => setState(() => _leaveRequests = _loadLeaveRequests()), icon: const Icon(Icons.refresh), label: const Text('Retry leave requests')),
+      ]);
 
   Widget _schoolCalendarCard(Color text, Color muted, Color surface, bool dark, ParentColorGrade grade) => Card(
         color: surface,
@@ -244,8 +345,8 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
           padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Expanded(child: Text('School calendar', style: TextStyle(fontWeight: FontWeight.w800, color: text))),
-              TextButton(onPressed: () => _selectTab(1), child: const Text('Attendance')),
+              Expanded(child: Text('School calendar', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: text))),
+              TextButton(onPressed: _openCalendarSection, child: const Text('See all')),
             ]),
             FutureBuilder<dynamic>(
               future: _calendar,
@@ -265,7 +366,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
                   ..sort((a, b) => (a['starts_on']?.toString() ?? '').compareTo(b['starts_on']?.toString() ?? ''));
                 if (events.isEmpty) return Padding(padding: const EdgeInsets.only(bottom: 10), child: Text('No upcoming school calendar events were returned.', style: TextStyle(color: muted)));
                 return Column(children: [
-                  for (final event in events.take(3)) _calendarEventTile(event, text, muted, dark, grade),
+                  _calendarEventTile(events.first, text, muted, dark, grade),
                 ]);
               },
             ),
@@ -322,19 +423,6 @@ class _SmallFooter extends StatelessWidget {
   const _SmallFooter();
   @override
   Widget build(BuildContext context) => Center(child: Text('www.taarro.com', style: TextStyle(color: Theme.of(context).brightness == Brightness.dark ? AppColors.darkMuted : AppColors.muted, fontSize: 11, letterSpacing: 1.1)));
-}
-
-Widget _actionCard(BuildContext context, String title, IconData icon, VoidCallback onTap, ParentColorGrade grade) {
-  final dark = Theme.of(context).brightness == Brightness.dark;
-  return Card(color: dark ? AppColors.darkSurface : grade.cardBg, child: InkWell(
-    borderRadius: BorderRadius.circular(16),
-    onTap: onTap,
-    child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Icon(icon, color: dark ? AppColors.darkPrimary : grade.accentText),
-      const SizedBox(height: 12),
-      Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: dark ? AppColors.darkInk : grade.textMain)),
-    ])),
-  ));
 }
 
 Widget _inlineError(String message) => Container(

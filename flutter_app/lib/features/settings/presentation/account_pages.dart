@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/parent_theme.dart';
 import '../../../core/widgets/api_loading_skeleton.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
@@ -179,7 +180,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     final similarOk = _next.text.isEmpty || ((!name.isNotEmpty || !_next.text.toLowerCase().contains(name.split(' ').first)) && (!email.isNotEmpty || !_next.text.toLowerCase().contains(email.split('@').first)));
     return Scaffold(
       appBar: AppBar(title: const Text('Change password')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(18, 16, 18, 24), children: [
+      body: ListView(padding: const EdgeInsets.fromLTRB(18, 8, 18, 24), children: [
         _passwordField('Current password', _current, _showCurrent, () => setState(() => _showCurrent = !_showCurrent)),
         const SizedBox(height: 18),
         _passwordField('New password', _next, _showNext, () => setState(() => _showNext = !_showNext), onChanged: (_) => setState(() {})),
@@ -210,9 +211,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 }
 
 class LeaveRequestScreen extends StatefulWidget {
-  const LeaveRequestScreen({super.key, required this.children, required this.selectedChildId});
+  const LeaveRequestScreen({super.key, required this.children, required this.selectedChildId, this.colorIndex = 0});
   final List<Map<String, dynamic>> children;
   final String selectedChildId;
+  final int colorIndex;
 
   @override
   State<LeaveRequestScreen> createState() => _LeaveRequestScreenState();
@@ -351,9 +353,11 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final muted = dark ? AppColors.darkMuted : AppColors.muted;
+    final grade = getParentColorGrade(widget.colorIndex);
     return Scaffold(
+      backgroundColor: dark ? AppColors.darkBg : grade.screenBg,
       appBar: AppBar(title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Request leave'), Text('${_child['full_name'] ?? ''} · ${_child['class_name'] ?? ''} ${_child['section_name'] ?? ''}', style: TextStyle(fontSize: 12, color: muted))])),
-      body: ListView(padding: const EdgeInsets.fromLTRB(18, 16, 18, 24), children: [
+      body: ListView(padding: const EdgeInsets.fromLTRB(18, 8, 18, 24), children: [
         const Text('Child'),
         const SizedBox(height: 7),
         DropdownButtonFormField<String>(value: _studentId, items: [for (final child in widget.children) DropdownMenuItem(value: child['id'].toString(), child: Text('${child['full_name']} · ${child['class_name'] ?? ''} ${child['section_name'] ?? ''}'))], onChanged: widget.children.length > 1 ? _selectChild : null),
@@ -370,7 +374,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
           return FutureBuilder<dynamic>(future: _rangeCount, builder: (context, countSnapshot) {
             if (countSnapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'inline');
             if (countSnapshot.hasError || countSnapshot.data is! Map) return TextButton.icon(onPressed: () => setState(() { _rangeCount = _loadCount(); }), icon: const Icon(Icons.refresh), label: const Text('Retry working day count'));
-            return Align(alignment: Alignment.centerLeft, child: Chip(label: Text('${countSnapshot.data['working_days'] ?? 0} working days'), backgroundColor: dark ? AppColors.darkSky : AppColors.sky));
+            return Align(alignment: Alignment.centerLeft, child: Chip(label: Text('${countSnapshot.data['working_days'] ?? 0} working days', style: TextStyle(color: dark ? AppColors.darkSkyInk : grade.accentText)), backgroundColor: dark ? AppColors.darkSky : grade.subtleBg));
           });
         }),
         const SizedBox(height: 8),
@@ -385,7 +389,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         const SizedBox(height: 4),
         Text('PDF, JPG, or PNG up to 5 MB', style: TextStyle(color: muted, fontSize: 12)),
       ]),
-      bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 14), child: SizedBox(width: double.infinity, height: 50, child: FilledButton.icon(onPressed: _submitting ? null : _submit, icon: _submitting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_outlined), label: const Text('Send to class teacher'))))),
+      bottomNavigationBar: SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(18, 10, 18, 14), child: SizedBox(width: double.infinity, height: 50, child: FilledButton.icon(style: dark ? null : FilledButton.styleFrom(backgroundColor: grade.accentBg, foregroundColor: Colors.white), onPressed: _submitting ? null : _submit, icon: _submitting ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send_outlined), label: const Text('Send to class teacher'))))),
     );
   }
 

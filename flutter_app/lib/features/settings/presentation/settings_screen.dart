@@ -44,8 +44,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final muted = dark ? AppColors.darkMuted : grade.textMuted;
     final theme = ref.watch(themeModeProvider);
     final themeValue = theme == ThemeMode.system ? 'system' : theme.name;
-    return ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 28), children: [
-      Text('More', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: fg)),
+    return ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 24), children: [
+      Text('More', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: fg, letterSpacing: -0.4)),
       const SizedBox(height: 14),
       Card(child: Padding(padding: const EdgeInsets.all(16), child: Row(children: [
         CircleAvatar(radius: 28, backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg, child: Text(_initials(_user['full_name']?.toString() ?? ''), style: TextStyle(color: dark ? AppColors.darkPrimary : grade.accentText, fontWeight: FontWeight.w800))),
@@ -121,7 +121,7 @@ class _AlertPreferencesScreenState extends State<AlertPreferencesScreen> {
           final categories = payload['categories'] as List;
           final muted = Theme.of(context).brightness == Brightness.dark ? AppColors.darkMuted : AppColors.muted;
           final dark = Theme.of(context).brightness == Brightness.dark;
-          return ListView(padding: const EdgeInsets.all(16), children: [
+          return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), children: [
             Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
               Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(children: [const Expanded(child: SizedBox()), SizedBox(width: 58, child: Text('Push', textAlign: TextAlign.center, style: TextStyle(color: muted))), SizedBox(width: 58, child: Text('Email', textAlign: TextAlign.center, style: TextStyle(color: muted)))])),
               if (categories.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('The server returned no alert categories.')),
@@ -180,7 +180,7 @@ class _SignedInDevicesScreenState extends State<SignedInDevicesScreen> {
           if (snapshot.hasError) return _pageError(snapshot.error.toString(), () => setState(_load));
           if (snapshot.data is! List) return _pageError('The server returned invalid session data.', () => setState(_load));
           final sessions = snapshot.data as List;
-          return ListView(padding: const EdgeInsets.all(16), children: [
+          return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 16), children: [
             const Text('Revoke a device you do not recognise. Devices not used for 14 days are signed out automatically.'),
             const SizedBox(height: 12),
             for (final item in sessions.whereType<Map>()) Card(child: ListTile(

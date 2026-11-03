@@ -7,11 +7,12 @@ import '../../../core/utils/parent_theme.dart';
 import '../../../core/widgets/api_loading_skeleton.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, required this.me, required this.child, this.colorIndex = 0, this.embedded = false, this.onBack});
+  const ProfileScreen({super.key, required this.me, required this.child, this.colorIndex = 0, this.embedded = false, this.neutral = false, this.onBack});
   final Map<String, dynamic> me;
   final Map<String, dynamic> child;
   final int colorIndex;
   final bool embedded;
+  final bool neutral;
   final VoidCallback? onBack;
 
   @override
@@ -63,8 +64,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final address = data['address'] is Map ? Map<String, dynamic>.from(data['address'] as Map) : <String, dynamic>{};
     final house = data['house'] is Map ? Map<String, dynamic>.from(data['house'] as Map) : <String, dynamic>{};
     final office = data['office'] is Map ? Map<String, dynamic>.from(data['office'] as Map) : <String, dynamic>{};
-    final fg = dark ? AppColors.darkInk : grade.textMain;
-    final muted = dark ? AppColors.darkMuted : grade.textMuted;
+    final useNeutral = widget.neutral && !dark;
+    final fg = dark ? AppColors.darkInk : useNeutral ? AppColors.ink : grade.textMain;
+    final muted = dark ? AppColors.darkMuted : useNeutral ? AppColors.muted : grade.textMuted;
     final name = data['full_name'].toString();
     final addressText = [address['line'], address['city'], address['state'], address['pin_code']]
         .where((value) => value != null && value.toString().isNotEmpty)
@@ -73,8 +75,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return RefreshIndicator(
       onRefresh: () async => setState(_load),
       child: ListView(padding: const EdgeInsets.fromLTRB(18, 4, 18, 24), children: [
-        Card(color: dark ? AppColors.darkSurface : grade.screenBg, child: Padding(padding: const EdgeInsets.fromLTRB(16, 18, 16, 18), child: Column(children: [
-          CircleAvatar(radius: 43, backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg, child: Text(_initials(name), style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: dark ? AppColors.darkPrimary : grade.accentText))),
+        Card(color: dark ? AppColors.darkSurface : useNeutral ? AppColors.surface : grade.screenBg, child: Padding(padding: const EdgeInsets.fromLTRB(16, 18, 16, 18), child: Column(children: [
+          CircleAvatar(radius: 43, backgroundColor: dark ? AppColors.darkPrimarySoft : useNeutral ? AppColors.primarySoft : grade.subtleBg, child: Text(_initials(name), style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: dark ? AppColors.darkPrimary : useNeutral ? AppColors.primary : grade.accentText))),
           const SizedBox(height: 12),
           Text(name, textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: fg)),
           const SizedBox(height: 3),
@@ -91,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text('Guardians', style: TextStyle(fontWeight: FontWeight.w800, color: fg)),
           const SizedBox(height: 8),
           if (guardians.isEmpty) Text('No guardian details were returned.', style: TextStyle(color: muted))
-          else for (final guardian in guardians) _guardianTile(guardian, fg, muted, grade, dark),
+          else for (final guardian in guardians) _guardianTile(guardian, fg, muted, grade, dark, neutral: useNeutral),
           const Divider(height: 20),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Address', style: TextStyle(color: muted, fontSize: 13)),
@@ -123,7 +125,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _guardianTile(Map guardian, Color fg, Color muted, ParentColorGrade grade, bool dark) {
+  Widget _guardianTile(Map guardian, Color fg, Color muted, ParentColorGrade grade, bool dark, {bool neutral = false}) {
     final name = guardian['full_name']?.toString() ?? '';
     final phone = guardian['phone']?.toString();
     final relation = [guardian['relationship'], if (guardian['is_you'] == true) 'You', phone]
@@ -131,7 +133,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .join(' · ');
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg, child: Text(_initials(name), style: TextStyle(color: dark ? AppColors.darkPrimary : grade.accentText, fontWeight: FontWeight.w700))),
+      leading: CircleAvatar(backgroundColor: dark ? AppColors.darkPrimarySoft : neutral ? AppColors.primarySoft : grade.subtleBg, child: Text(_initials(name), style: TextStyle(color: dark ? AppColors.darkPrimary : neutral ? AppColors.primary : grade.accentText, fontWeight: FontWeight.w700))),
       title: Text(name, style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
       subtitle: Text(relation, style: TextStyle(color: muted)),
       onTap: phone == null || phone.isEmpty ? null : () => _openContact(Uri(scheme: 'tel', path: phone)),
