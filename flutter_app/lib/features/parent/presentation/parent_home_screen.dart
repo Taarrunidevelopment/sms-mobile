@@ -72,7 +72,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
       });
       return value;
     }).catchError((Object error) {
-      if (mounted) setState(() => _unreadError = errorMessage(error));
+      if (mounted) setState(() => _unreadError = _errorMessage(error));
       return null;
     });
   }
@@ -211,7 +211,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
             future: _today,
             builder: (context, snapshot) {
               if (snapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'inline');
-              if (snapshot.hasError) return _inlineError(errorMessage(snapshot.error!));
+              if (snapshot.hasError) return _inlineError(_errorMessage(snapshot.error!));
               if (snapshot.data is! List) return _inlineError('The server returned invalid attendance data.');
               final matches = (snapshot.data as List).where((entry) => entry is Map && entry['student_id'].toString() == _childId).toList();
               if (matches.isEmpty) return Text('No attendance record is available for today.', style: TextStyle(color: muted));
@@ -251,7 +251,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
               future: _calendar,
               builder: (context, snapshot) {
                 if (snapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'inline');
-                if (snapshot.hasError) return _calendarError(errorMessage(snapshot.error!));
+                if (snapshot.hasError) return _calendarError(_errorMessage(snapshot.error!));
                 if (snapshot.data is! List) return _calendarError('The school calendar returned invalid data.');
                 final today = DateTime.now();
                 final events = (snapshot.data as List)
@@ -313,7 +313,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errorMessage(error))));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
     }
   }
 }
@@ -348,5 +348,6 @@ String _sectionLabel(Map<String, dynamic> child) => [child['class_name'], child[
 String _initials(String value) => value.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).take(2).map((e) => e[0].toUpperCase()).join();
 int _number(dynamic value) => value is num ? value.toInt() : int.tryParse(value?.toString() ?? '') ?? 0;
 String _humanize(String value) => value.replaceAll('_', ' ').split(' ').map((part) => part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}').join(' ');
+String _errorMessage(Object error) => error.toString();
 IconData _attendanceIcon(String status) => switch (status.toLowerCase()) { 'present' => Icons.check_circle, 'absent' => Icons.cancel, 'late' => Icons.schedule, _ => Icons.info_outline };
 Color _attendanceColor(String status) => switch (status.toLowerCase()) { 'present' => AppColors.success, 'absent' => AppColors.danger, 'late' => AppColors.warning, _ => AppColors.muted };
