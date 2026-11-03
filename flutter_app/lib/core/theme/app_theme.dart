@@ -5,7 +5,6 @@ abstract final class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Plus Jakarta Sans',
       scaffoldBackgroundColor: AppColors.bg,
       colorScheme: const ColorScheme.light(
         primary: AppColors.primary,
@@ -22,7 +21,6 @@ abstract final class AppTheme {
           color: AppColors.ink,
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          fontFamily: 'Plus Jakarta Sans',
         ),
       ),
       cardTheme: CardTheme(
@@ -57,7 +55,6 @@ abstract final class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      fontFamily: 'Plus Jakarta Sans',
       scaffoldBackgroundColor: AppColors.darkBg,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.darkPrimary,
@@ -74,7 +71,6 @@ abstract final class AppTheme {
           color: AppColors.darkInk,
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          fontFamily: 'Plus Jakarta Sans',
         ),
       ),
       cardTheme: CardTheme(

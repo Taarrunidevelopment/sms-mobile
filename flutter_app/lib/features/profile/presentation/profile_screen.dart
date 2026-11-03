@@ -1,357 +1,94 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/formatters.dart';
-import '../../../domain/entities/models.dart';
-import '../../auth/presentation/login_screen.dart';
+import '../../../core/utils/parent_theme.dart';
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key, required this.session});
-  final Session session;
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key, required this.me, required this.child, this.colorIndex = 0});
+  final Map<String, dynamic> me;
+  final Map<String, dynamic> child;
+  final int colorIndex;
 
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          content: const Text(
-            'Are you sure you want to log out from this session? You will need to verify your phone number to sign back in.',
-            style: TextStyle(fontSize: 13, color: AppColors.muted),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel', style: TextStyle(color: AppColors.muted)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.danger,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  (route) => false,
-                );
-              },
-              child: const Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  late Future<dynamic> _profile;
+  @override
+  void initState() { super.initState(); _load(); }
+  void _load() => _profile = ApiClient.instance.getChildProfile(widget.child['id'].toString());
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? AppColors.darkSurface : AppColors.surface;
-    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
-    final inkColor = isDark ? AppColors.darkInk : AppColors.ink;
-    final mutedColor = isDark ? AppColors.darkMuted : AppColors.muted;
-
-    final isParent = session.role == AppRole.parent;
-
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final grade = getParentColorGrade(widget.colorIndex);
+    final school = widget.me['school'] is Map ? Map<String, dynamic>.from(widget.me['school'] as Map) : <String, dynamic>{};
+    final fg = dark ? AppColors.darkInk : grade.textMain;
+    final muted = dark ? AppColors.darkMuted : grade.textMuted;
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkBg : AppColors.bg,
-      appBar: AppBar(
-        title: const Text('User Profile'),
-        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-        foregroundColor: inkColor,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Hero Profile Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: borderColor),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: AppColors.primary,
-                    child: Text(
-                      AppFormatters.getInitials(session.userName),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          session.userName,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 18,
-                            color: inkColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${session.role.name.toUpperCase()} · Sunrise Public School',
-                          style: TextStyle(
-                            color: mutedColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(Icons.phone_outlined, size: 14, color: mutedColor),
-                            const SizedBox(width: 6),
-                            Text(
-                              AppFormatters.formatPhone(session.phone),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                color: inkColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Workspace Account Information Card
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: borderColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'WORKSPACE ACCOUNT INFORMATION',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: mutedColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoRow('Institution', 'Sunrise Public School', inkColor, mutedColor),
-                  Divider(color: borderColor, height: 20),
-                  _buildInfoRow('Role Privilege', session.role.name.toUpperCase(), inkColor, mutedColor),
-                  Divider(color: borderColor, height: 20),
-                  _buildInfoRow('Academic Session', '2026-27 (Active)', inkColor, mutedColor),
-                  Divider(color: borderColor, height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Status', style: TextStyle(color: mutedColor, fontSize: 12)),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.successBg,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'Active',
-                          style: TextStyle(
-                            color: AppColors.successText,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // For Parents: Enrolled Students
-            if (isParent) ...[
-              Text(
-                'ENROLLED STUDENTS (2)',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: mutedColor,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-              _buildStudentCard(
-                name: 'Aarav Kumar',
-                className: 'Grade 5 A',
-                rollNo: '7',
-                admissionNo: 'SPS-2025-0001',
-                cardBg: cardBg,
-                borderColor: borderColor,
-                inkColor: inkColor,
-                mutedColor: mutedColor,
-              ),
-              const SizedBox(height: 8),
-              _buildStudentCard(
-                name: 'Diya Kumar',
-                className: 'Grade 2 B',
-                rollNo: '12',
-                admissionNo: 'SPS-2025-0002',
-                cardBg: cardBg,
-                borderColor: borderColor,
-                inkColor: inkColor,
-                mutedColor: mutedColor,
-              ),
-              const SizedBox(height: 16),
-            ],
-
-            // Logout Action Button
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.dangerBg,
-                  foregroundColor: AppColors.dangerText,
-                  elevation: 0,
-                  side: const BorderSide(color: Color(0xFFFCD0D4)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: () => _showLogoutDialog(context),
-                icon: const Icon(Icons.logout_rounded, size: 18),
-                label: Text(
-                  'Log out from ${session.userName}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-              ),
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value, Color inkColor, Color mutedColor) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(color: mutedColor, fontSize: 12)),
-        Text(value, style: TextStyle(color: inkColor, fontWeight: FontWeight.bold, fontSize: 12)),
-      ],
-    );
-  }
-
-  Widget _buildStudentCard({
-    required String name,
-    required String className,
-    required String rollNo,
-    required String admissionNo,
-    required Color cardBg,
-    required Color borderColor,
-    required Color inkColor,
-    required Color mutedColor,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2EFFD),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.school, color: AppColors.primary, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: inkColor),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Class: $className · Roll No. $rollNo',
-                      style: TextStyle(color: mutedColor, fontSize: 11, fontFamily: 'monospace'),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF2EFFD),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  admissionNo,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
+      appBar: AppBar(title: const Text('Child profile')),
+      body: FutureBuilder<dynamic>(future: _profile, builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+        if (snapshot.hasError) return _error(snapshot.error.toString());
+        if (snapshot.data is! Map) return _error('The server returned invalid profile data.');
+        final data = Map<String, dynamic>.from(snapshot.data as Map);
+        if (data['full_name'] == null || data['full_name'].toString().trim().isEmpty) return _error('The server returned incomplete child profile data.');
+        final guardians = data['guardians'] is List ? data['guardians'] as List : const [];
+        final address = data['address'] is Map ? Map<String, dynamic>.from(data['address'] as Map) : <String, dynamic>{};
+        final house = data['house'] is Map ? Map<String, dynamic>.from(data['house'] as Map) : <String, dynamic>{};
+        final office = data['office'] is Map ? Map<String, dynamic>.from(data['office'] as Map) : <String, dynamic>{};
+        final name = data['full_name'].toString();
+        final addressText = [address['line'], address['city'], address['state'], address['pin_code']]
+            .where((value) => value != null && value.toString().isNotEmpty)
+            .join(', ');
+        return RefreshIndicator(onRefresh: () async => setState(_load), child: ListView(padding: const EdgeInsets.all(18), children: [
+          Card(color: dark ? AppColors.darkSurface : grade.cardBg, child: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
+            CircleAvatar(radius: 42, backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg, child: Text(_initials(name), style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: dark ? AppColors.darkPrimary : grade.accentText))),
+            const SizedBox(height: 12),
+            Text(name, style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800, color: fg)),
+            Text([data['class_name'], data['section_name'], if (data['roll_no'] != null) 'Roll ${data['roll_no']}'].where((e) => e != null && e.toString().isNotEmpty).join(' · '), style: TextStyle(color: muted)),
+            if (school['short_name'] != null || school['name'] != null) Text((school['short_name'] ?? school['name']).toString(), style: TextStyle(color: muted, fontSize: 12)),
+          ]))),
           const SizedBox(height: 12),
-          Divider(height: 1, color: borderColor),
+          _infoCard('Student details', [
+            _row('Admission no.', data['admission_no']),
+            _row('Date of birth', data['date_of_birth']),
+            _row('House', house['name']),
+            _row('House colour', house['colour']),
+          ], fg, muted),
           const SizedBox(height: 12),
-          _buildInfoRow('Student Name:', name, inkColor, mutedColor),
-          const SizedBox(height: 6),
-          _buildInfoRow('Admission No:', admissionNo, inkColor, mutedColor),
-          const SizedBox(height: 6),
-          _buildInfoRow('Class & Section:', className, inkColor, mutedColor),
-          const SizedBox(height: 6),
-          _buildInfoRow('Date of Birth:', '2015-06-15', inkColor, mutedColor),
-          const SizedBox(height: 6),
-          _buildInfoRow('Enrollment Status:', 'Active Student', inkColor, const Color(0xFF1A8E63)),
-        ],
-      ),
+          _infoCard('Guardians', guardians.map<Widget>((guardian) {
+            if (guardian is! Map) return const SizedBox.shrink();
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: CircleAvatar(backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg, child: Text(_initials(guardian['full_name']?.toString() ?? ''))),
+              title: Text(guardian['full_name']?.toString() ?? 'Guardian', style: TextStyle(color: fg)),
+              subtitle: Text([guardian['relationship'], if (guardian['is_you'] == true) 'You', guardian['phone']].where((e) => e != null && e.toString().isNotEmpty).join(' · '), style: TextStyle(color: muted)),
+            );
+          }).toList(), fg, muted),
+          const SizedBox(height: 12),
+          _infoCard('Address', [
+            Text(addressText.isEmpty ? 'Address not provided by the school.' : addressText, style: TextStyle(color: fg)),
+          ], fg, muted),
+          const SizedBox(height: 12),
+          _infoCard('School contact', [
+            _row('Phone', office['phone']),
+            _row('Email', office['email']),
+          ], fg, muted),
+          const SizedBox(height: 20),
+          Center(child: Text('www.taarro.com', style: TextStyle(color: muted, fontSize: 11, letterSpacing: 1.1))),
+        ]));
+      }),
     );
   }
+
+  Widget _error(String message) => Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text(message, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.danger)), TextButton.icon(onPressed: () => setState(_load), icon: const Icon(Icons.refresh), label: const Text('Retry'))])));
+
+  Widget _infoCard(String title, List<Widget> children, Color fg, Color muted) => Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w800, color: fg)), const SizedBox(height: 10), if (children.isEmpty) Text('No details were returned.', style: TextStyle(color: muted)) else ...children])));
+
+  Widget _row(String label, dynamic value) => Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: Row(children: [Expanded(child: Text(label, style: const TextStyle(color: AppColors.muted))), Text(value?.toString() ?? 'Not provided')]));
 }
+
+String _initials(String name) => name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).take(2).map((e) => e[0].toUpperCase()).join();

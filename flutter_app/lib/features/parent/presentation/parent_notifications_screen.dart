@@ -1,202 +1,111 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../domain/entities/models.dart';
-import '../../../core/utils/parent_theme.dart';
-import '../../../core/widgets/taarro_footer.dart';
-import '../../../core/utils/parent_theme.dart';
 
 class ParentNotificationsScreen extends StatefulWidget {
-  const ParentNotificationsScreen({super.key, this.session, this.selectedChildId = 1});
-  final Session? session;
-  final int selectedChildId;
+  const ParentNotificationsScreen({super.key});
 
   @override
   State<ParentNotificationsScreen> createState() => _ParentNotificationsScreenState();
 }
 
 class _ParentNotificationsScreenState extends State<ParentNotificationsScreen> {
-  final List<Map<String, dynamic>> _children = [
-    {'id': 1, 'name': 'Aarav Kumar'},
-    {'id': 2, 'name': 'Diya Kumar'},
-  ];
+  bool _unreadOnly = false;
+  late Future<dynamic> _notifications;
 
-  IconData _getNotificationIcon(String type) {
-    switch (type) {
-      case 'assignment':
-        return Icons.menu_book_rounded;
-      case 'attendance':
-        return Icons.calendar_today_rounded;
-      case 'fee':
-        return Icons.account_balance_wallet_rounded;
-      case 'marks':
-        return Icons.military_tech_rounded;
-      default:
-        return Icons.notifications_none_rounded;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() => _notifications = ApiClient.instance.getNotifications(unread: _unreadOnly);
+  void _reload() => setState(_load);
+
+  Future<void> _markRead(String id) async {
+    try {
+      await ApiClient.instance.markNotificationRead(id);
+      _reload();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
-  Color _getNotificationIconColor(String type, bool isDark) {
-    if (isDark) return Colors.white;
-    switch (type) {
-      case 'assignment':
-        return const Color(0xFF9333EA);
-      case 'attendance':
-        return const Color(0xFF059669);
-      case 'fee':
-        return const Color(0xFFD97706);
-      case 'marks':
-        return const Color(0xFFE11D48);
-      default:
-        return AppColors.primary;
+  Future<void> _markAllRead() async {
+    try {
+      await ApiClient.instance.markAllNotificationsRead();
+      _reload();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final list = <AppNotification>[]; // Placeholder for backend data integration
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final selectedChild = _children.firstWhere(
-      (c) => c['id'] == widget.selectedChildId,
-      orElse: () => _children.first,
-    );
-    final childIndex = _children.indexOf(selectedChild);
-    final safeIndex = childIndex >= 0 ? childIndex : 0;
-    final grade = getParentColorGrade(safeIndex);
-
-    final bg = isDark ? AppColors.darkBg : grade.screenBg;
-    final surface = isDark ? AppColors.darkSurface : grade.cardBg;
-    final textColor = isDark ? AppColors.darkText : grade.textMain;
-    final mutedColor = isDark ? AppColors.darkMuted : grade.textMuted;
-    final borderColor = isDark ? AppColors.darkBorder : grade.cardBorder;
-
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        title: Text(
-          'Notifications & Alerts',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
-            color: isDark ? Colors.white : grade.textMain,
-          ),
-        ),
-        backgroundColor: isDark ? AppColors.darkSurface : grade.cardBg,
-        foregroundColor: isDark ? Colors.white : grade.textMain,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(color: borderColor, height: 1.0),
-        ),
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final text = dark ? AppColors.darkInk : AppColors.ink;
+    final muted = dark ? AppColors.darkMuted : AppColors.muted;
+    return RefreshIndicator(onRefresh: () async => _reload(), child: ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 32), children: [
+      Row(children: [
+        Expanded(child: Text('Notices', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: text))),
+        TextButton(onPressed: _markAllRead, child: const Text('Mark all read')),
+      ]),
+      const SizedBox(height: 8),
+      SegmentedButton<bool>(
+        segments: const [ButtonSegment(value: false, label: Text('All')), ButtonSegment(value: true, label: Text('Unread'))],
+        selected: {_unreadOnly},
+        onSelectionChanged: (values) => setState(() { _unreadOnly = values.first; _load(); }),
       ),
-      body: list.isEmpty
-          ? Center(
-              child: Text(
-                'No notifications right now',
-                style: TextStyle(fontSize: 13, color: mutedColor),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: list.length + 1,
-              itemBuilder: (ctx, idx) {
-                if (idx == list.length) {
-                  return const TaarroFooter();
-                }
-                final item = list[idx];
-                final isUnread = item.readAt == null;
-                final cardBgColor = isUnread
-                    ? (isDark ? const Color(0xFF262445) : grade.subtleBg)
-                    : surface;
+      const SizedBox(height: 12),
+      FutureBuilder<dynamic>(
+        future: _notifications,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
+          if (snapshot.hasError) return _error(snapshot.error.toString());
+          if (snapshot.data is! Map || (snapshot.data as Map)['items'] is! List) return _error('The server returned invalid notification data.');
+          final items = (snapshot.data as Map)['items'] as List;
+          if (items.isEmpty) return Card(child: Padding(padding: const EdgeInsets.all(18), child: Text('No notices were returned.', style: TextStyle(color: muted))));
+          return Column(children: [
+            for (final item in items.whereType<Map>()) _notificationCard(item, text, muted, dark),
+            const SizedBox(height: 20),
+            Text('www.taarro.com', style: TextStyle(color: muted, fontSize: 11, letterSpacing: 1.1)),
+          ]);
+        },
+      ),
+    ]));
+  }
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      item.readAt = DateTime.now();
-                    });
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: cardBgColor,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: borderColor),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: isDark ? AppColors.darkSunken : grade.innerCardBg,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: borderColor),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              _getNotificationIcon(item.type),
-                              color: _getNotificationIconColor(item.type, isDark),
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      item.title,
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 13,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                  ),
-                                  if (isUnread)
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      margin: const EdgeInsets.only(left: 6),
-                                      decoration: BoxDecoration(
-                                        color: grade.accentBg,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                item.body,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: mutedColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+  Widget _notificationCard(Map item, Color text, Color muted, bool dark) {
+    final read = item['read'] == true;
+    final id = item['id']?.toString();
+    return Card(
+      color: dark ? AppColors.darkSurface : AppColors.surface,
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: !read && id != null ? () => _markRead(id) : null,
+        child: Padding(padding: const EdgeInsets.all(16), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(_icon(item['kind']?.toString() ?? ''), color: read ? muted : (dark ? AppColors.darkPrimary : AppColors.primary)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item['title']?.toString() ?? 'Notice', style: TextStyle(color: text, fontWeight: read ? FontWeight.w600 : FontWeight.w800)),
+            if (item['body'] != null) ...[const SizedBox(height: 4), Text(item['body'].toString(), style: TextStyle(color: muted, height: 1.35))],
+            if (item['created_at'] != null) ...[const SizedBox(height: 6), Text(item['created_at'].toString(), style: TextStyle(color: muted, fontSize: 11))],
+          ])),
+          if (!read) const Padding(padding: EdgeInsets.only(left: 8, top: 6), child: CircleAvatar(radius: 4, backgroundColor: AppColors.primary)),
+        ])),
+      ),
     );
   }
+
+  Widget _error(String message) => Card(color: AppColors.dangerBg, child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [Text(message, style: const TextStyle(color: AppColors.dangerInk)), TextButton.icon(onPressed: _reload, icon: const Icon(Icons.refresh), label: const Text('Retry'))])));
 }
+
+IconData _icon(String kind) => switch (kind.toLowerCase()) {
+      'assignment' => Icons.menu_book_outlined,
+      'attendance' => Icons.event_available_outlined,
+      'fee' => Icons.account_balance_wallet_outlined,
+      'marks' => Icons.grade_outlined,
+      _ => Icons.notifications_none_rounded,
+    };

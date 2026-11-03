@@ -1,317 +1,90 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../app/providers.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/utils/formatters.dart';
-import '../../domain/entities/models.dart';
+import '../network/api_client.dart';
+import '../theme/app_colors.dart';
 
 class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
   const AppHeader({
     super.key,
-    required this.session,
+    required this.schoolName,
+    required this.userName,
+    required this.unreadCount,
+    this.hasUnreadError = false,
     required this.onOpenNotifications,
     required this.onOpenProfile,
-    this.unreadCount = 3,
   });
 
-  final Session session;
+  final String schoolName;
+  final String userName;
+  final int unreadCount;
+  final bool hasUnreadError;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenProfile;
-  final int unreadCount;
 
   @override
-  Size get preferredSize => const Size.fromHeight(104);
-
-  (Color bg, Color text, Color border, String label) _getRoleStyle(AppRole role) {
-    return (const Color(0xFFFFEDE5), const Color(0xFFD9653B), const Color(0xFFFCD8C9), 'Parent');
-  }
+  Size get preferredSize => const Size.fromHeight(72);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeProvider);
-    final isDark = themeMode == ThemeMode.dark ||
-        (themeMode == ThemeMode.system &&
-            MediaQuery.of(context).platformBrightness == Brightness.dark);
-
-    final roleStyle = _getRoleStyle(session.role);
-    final firstName = session.userName.split(' ').first;
-
-    return Container(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 6,
-        left: 16,
-        right: 16,
-        bottom: 10,
-      ),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
-            width: 1,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fg = isDark ? AppColors.darkInk : AppColors.ink;
+    final muted = isDark ? AppColors.darkMuted : AppColors.muted;
+    return AppBar(
+      automaticallyImplyLeading: false,
+      backgroundColor: isDark ? AppColors.darkSurface : AppColors.surface,
+      titleSpacing: 16,
+      title: Row(children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.darkPrimarySoft : AppColors.primarySoft,
+            borderRadius: BorderRadius.circular(11),
           ),
+          alignment: Alignment.center,
+          child: Text(_initials(schoolName), style: TextStyle(color: isDark ? AppColors.darkPrimary : AppColors.primary, fontWeight: FontWeight.w800)),
         ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Top App Logo & Tagline Banner
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: isDark ? AppColors.darkPrimarySoft : Colors.white,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: isDark ? AppColors.darkBorder : const Color(0xFFE0E2F9),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Image.asset(
-                    'assets/images/taarro_logo.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Icon(
-                      Icons.school_rounded,
-                      size: 14,
-                      color: isDark ? const Color(0xFFA3A0FB) : AppColors.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Taarro',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? AppColors.darkInk : AppColors.ink,
-                    letterSpacing: -0.2,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '|',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark ? Colors.white24 : Colors.black26,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Making Education Smarter with AI.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isDark ? const Color(0xFFA3A0FB) : AppColors.primary,
-                      letterSpacing: 0.1,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Divider(
-            height: 1,
-            thickness: 1,
-            color: isDark ? AppColors.darkBorder : AppColors.border.withOpacity(0.5),
-          ),
-          const SizedBox(height: 8),
-          Row(
-        children: [
-          // School branding & Greeting
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.darkPrimarySoft : const Color(0xFFEDEEFC),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: isDark ? AppColors.darkBorder : const Color(0xFFE0E2F9),
-              ),
-            ),
-            child: Icon(
-              Icons.school_rounded,
-              size: 20,
-              color: isDark ? const Color(0xFFA3A0FB) : AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Sunrise Public School',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? AppColors.darkInk : AppColors.ink,
-                    letterSpacing: -0.2,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Good morning, $firstName',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? AppColors.darkMuted : AppColors.muted,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: roleStyle.$1,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: roleStyle.$3),
-                      ),
-                      child: Text(
-                        roleStyle.$4,
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          color: roleStyle.$2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Actions
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Theme Toggle (Dark / Light)
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: () {
-                    ref.read(themeModeProvider.notifier).state =
-                        isDark ? ThemeMode.light : ThemeMode.dark;
-                  },
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: isDark ? AppColors.darkSunken : AppColors.sunken,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: isDark ? AppColors.darkBorder : AppColors.border,
-                      ),
-                    ),
-                    child: Icon(
-                      isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                      size: 16,
-                      color: isDark ? const Color(0xFFF59E0B) : AppColors.muted,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-
-              // Notifications
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(10),
-                  onTap: onOpenNotifications,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.darkSunken : AppColors.sunken,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isDark ? AppColors.darkBorder : AppColors.border,
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.notifications_none_rounded,
-                          size: 18,
-                          color: isDark ? AppColors.darkMuted : AppColors.muted,
-                        ),
-                      ),
-                      if (unreadCount > 0)
-                        Positioned(
-                          top: -3,
-                          right: -3,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFEF4444),
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                            child: Center(
-                              child: Text(
-                                unreadCount > 9 ? '9+' : '$unreadCount',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-
-              // Profile Avatar
-              GestureDetector(
-                onTap: onOpenProfile,
-                child: Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isDark ? AppColors.darkBorder : const Color(0xFFE0E2F9),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      AppFormatters.getInitials(session.userName),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-        ],
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          Text(schoolName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: fg, fontSize: 15, fontWeight: FontWeight.w800)),
+          Text(userName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11)),
+        ])),
+        IconButton(
+          tooltip: 'Notifications',
+          onPressed: onOpenNotifications,
+          icon: Badge(isLabelVisible: hasUnreadError || unreadCount > 0, label: Text(hasUnreadError ? '!' : unreadCount > 99 ? '99+' : '$unreadCount'), child: const Icon(Icons.notifications_none_rounded)),
+        ),
+        IconButton(
+          tooltip: 'Account',
+          onPressed: onOpenProfile,
+          icon: Icon(Icons.account_circle_outlined, color: isDark ? AppColors.darkPrimary : AppColors.primary),
+        ),
+        IconButton(
+          tooltip: isDark ? 'Use light theme' : 'Use dark theme',
+          onPressed: () async {
+            final next = isDark ? ThemeMode.light : ThemeMode.dark;
+            try {
+              await ApiClient.instance.savePreferences(next.name);
+              ref.read(themeModeProvider.notifier).state = next;
+            } catch (error) {
+              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+            }
+          },
+          icon: Icon(isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined),
+        ),
+      ]),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Divider(height: 1, color: isDark ? AppColors.darkBorder : AppColors.border),
       ),
     );
   }
+}
+
+String _initials(String value) {
+  final words = value.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+  if (words.isEmpty) return 'S';
+  return words.take(2).map((e) => e[0].toUpperCase()).join();
 }

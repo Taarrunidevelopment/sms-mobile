@@ -1,355 +1,207 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../domain/entities/models.dart';
 import '../../../core/utils/parent_theme.dart';
-import '../../../core/widgets/taarro_footer.dart';
 
 class ParentAttendanceScreen extends StatefulWidget {
-  const ParentAttendanceScreen({
-    super.key,
-    required this.session,
-    this.isEmbedded = true,
-    this.selectedChildId,
-    this.onChildSelected,
-  });
-  final Session session;
-  final bool isEmbedded;
-  final int? selectedChildId;
-  final ValueChanged<int>? onChildSelected;
+  const ParentAttendanceScreen({super.key, required this.children, required this.selectedChildId, required this.onChildSelected});
+  final List<Map<String, dynamic>> children;
+  final String selectedChildId;
+  final ValueChanged<String> onChildSelected;
 
   @override
   State<ParentAttendanceScreen> createState() => _ParentAttendanceScreenState();
 }
 
 class _ParentAttendanceScreenState extends State<ParentAttendanceScreen> {
-  late int _selectedChildId;
-
-  final List<Map<String, dynamic>> _children = [
-    {'id': 1, 'name': 'Aarav Kumar', 'class': 'Grade 5 A'},
-    {'id': 2, 'name': 'Diya Kumar', 'class': 'Grade 2 B'},
-  ];
+  late DateTime _month;
+  late Future<List<dynamic>> _data;
 
   @override
   void initState() {
     super.initState();
-    _selectedChildId = widget.selectedChildId ?? 1;
+    final now = DateTime.now();
+    _month = DateTime(now.year, now.month);
+    _data = _load();
   }
 
-  @override
-  void didUpdateWidget(covariant ParentAttendanceScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.selectedChildId != null && widget.selectedChildId != oldWidget.selectedChildId) {
-      setState(() {
-        _selectedChildId = widget.selectedChildId!;
-      });
+  String get _monthKey => '${_month.year}-${_month.month.toString().padLeft(2, '0')}';
+  String get _from => '$_monthKey-01';
+  String get _to => DateTime(_month.year, _month.month + 1, 0).toIso8601String().split('T').first;
+
+  Future<List<dynamic>> _load() async {
+    final api = ApiClient.instance;
+    return Future.wait([
+      api.getChildAttendance(widget.selectedChildId, _monthKey),
+      api.getCalendar(widget.selectedChildId, _from, _to),
+      api.getLeaveRequests(widget.selectedChildId),
+    ]);
+  }
+
+  void _reload() => setState(() => _data = _load());
+
+  Future<void> _createLeave() async {
+    final today = DateTime.now();
+    final todayIso = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    final rangeEnd = DateTime(today.year + 1, today.month, today.day);
+    final rangeEndIso = '${rangeEnd.year}-${rangeEnd.month.toString().padLeft(2, '0')}-${rangeEnd.day.toString().padLeft(2, '0')}';
+    DateTime earliest = DateTime(today.year, today.month, today.day);
+    try {
+      final availability = await ApiClient.instance.getWorkingDays(widget.selectedChildId, todayIso, rangeEndIso);
+      if (availability is! Map) throw const FormatException('The server returned invalid leave availability data.');
+      final date = availability['earliest_start']?.toString();
+      if (date != null && date.isNotEmpty) earliest = DateTime.parse(date);
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
+      return;
+    }
+    final reason = TextEditingController();
+    DateTime start = earliest;
+    DateTime end = start;
+    String? error;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(builder: (context, update) => AlertDialog(
+        title: const Text('Request leave'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Earliest leave date: ${_date(earliest)}'),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(icon: const Icon(Icons.date_range), label: Text('${_date(start)}${start == end ? '' : ' – ${_date(end)}'}'), onPressed: () async {
+            final range = await showDateRangePicker(context: context, firstDate: earliest, lastDate: rangeEnd, initialDateRange: DateTimeRange(start: start, end: end));
+            if (range != null) update(() { start = range.start; end = range.end; });
+          }),
+          const SizedBox(height: 10),
+          TextField(controller: reason, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Reason')),
+          if (error != null) Padding(padding: const EdgeInsets.only(top: 10), child: Text(error!, style: const TextStyle(color: AppColors.danger))),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () async {
+            if (reason.text.trim().isEmpty) { update(() => error = 'Enter a reason for the leave request.'); return; }
+            Navigator.pop(dialogContext, true);
+          }, child: const Text('Send request')),
+        ],
+      )),
+    );
+    if (confirmed != true) { reason.dispose(); return; }
+    try {
+      await ApiClient.instance.createLeaveRequest(
+        widget.selectedChildId,
+        startsOn: start.toIso8601String().split('T').first,
+        endsOn: end.toIso8601String().split('T').first,
+        reason: reason.text.trim(),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Leave request sent.')));
+        _reload();
+      }
+    } catch (exception) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(exception.toString())));
+    } finally {
+      reason.dispose();
+    }
+  }
+
+  Future<void> _withdraw(Map item) async {
+    try {
+      await ApiClient.instance.withdrawLeaveRequest(widget.selectedChildId, item['id'].toString(), (item['version'] as num?)?.toInt() ?? 1);
+      _reload();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final activeChildId = _selectedChildId;
-    final selectedChild = _children.firstWhere((c) => c['id'] == activeChildId, orElse: () => _children.first);
-    final childIndex = _children.indexOf(selectedChild);
-    final grade = getParentColorGrade(childIndex >= 0 ? childIndex : 0);
-
-    final bg = isDark ? AppColors.darkBg : grade.screenBg;
-    final surface = isDark ? AppColors.darkSurface : grade.cardBg;
-    final textColor = isDark ? AppColors.darkText : grade.textMain;
-    final mutedColor = isDark ? AppColors.darkMuted : grade.textMuted;
-    final borderColor = isDark ? AppColors.darkBorder : grade.cardBorder;
-
-    // Days in October 2026 simulation
-    final daysInMonth = List.generate(31, (i) {
-      final day = i + 1;
-      final date = DateTime(2026, 10, day);
-      final isSunday = date.weekday == DateTime.sunday;
-      String status = 'present';
-      if (isSunday) {
-        status = 'holiday';
-      } else if (day > 12) {
-        status = 'future';
-      } else if (day == 5) {
-        status = 'absent';
-      } else if (day == 9) {
-        status = 'late';
-      }
-      return {'day': day, 'weekday': date.weekday, 'status': status};
-    });
-
-    Widget body = ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-      children: [
-        // Header
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Attendance Record', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textColor)),
-            const SizedBox(height: 2),
-            Text('Monthly calendar & presence statistics for ${selectedChild['name']}', style: TextStyle(fontSize: 11, color: mutedColor)),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Child Switcher Chips
-        Row(
-          children: _children.map((child) {
-            final isSelected = child['id'] == activeChildId;
-            final index = _children.indexOf(child);
-            final grade = getParentColorGrade(index >= 0 ? index : 0);
-
-            final childBg = grade.cardBg;
-            final childText = grade.accentText;
-            final childBorder = grade.cardBorder;
-
-            final darkBg = AppColors.darkPrimarySoft;
-            final darkText = const Color(0xFFA3A0FB);
-            final darkBorder = const Color(0xFF3B82F6);
-
-            return GestureDetector(
-              onTap: () {
-                setState(() => _selectedChildId = child['id']);
-                widget.onChildSelected?.call(child['id']);
-              },
-              child: Container(
-                margin: const EdgeInsets.only(right: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? (isDark ? darkBg : childBg)
-                      : (isDark ? AppColors.darkSurface : const Color(0xFFF1F5F9)),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: isSelected
-                        ? (isDark ? darkBorder : childBorder)
-                        : (isDark ? AppColors.darkBorder : const Color(0xFFCBD5E1)),
-                    width: isSelected ? 2.0 : 1.0,
-                  ),
-                  boxShadow: isSelected
-                      ? [
-                          BoxShadow(
-                            color: (isDark ? darkBorder : childBorder).withOpacity(0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : null,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isSelected) ...[
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark ? darkText : childText,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    Text(
-                      '${child['name']} (${child['class']})',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
-                        color: isSelected ? (isDark ? darkText : childText) : (isDark ? AppColors.darkMuted : const Color(0xFF64748B)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 14),
-
-        // KPI Cards Row
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Presence Rate', style: TextStyle(fontSize: 10, color: mutedColor)),
-                    const SizedBox(height: 2),
-                    const Text('92%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A8E63), fontFamily: 'monospace')),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Present Days', style: TextStyle(fontSize: 10, color: mutedColor)),
-                    const SizedBox(height: 2),
-                    Text('10 / 12', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textColor, fontFamily: 'monospace')),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Absences', style: TextStyle(fontSize: 10, color: mutedColor)),
-                    const SizedBox(height: 2),
-                    const Text('1', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.dangerText, fontFamily: 'monospace')),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-
-        // Month Calendar Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('October 2026', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textColor)),
-                  Text('Academic Session 2025-26', style: TextStyle(fontSize: 11, color: mutedColor)),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // Weekday headers
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) {
-                  return SizedBox(
-                    width: 34,
-                    child: Center(
-                      child: Text(day, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: mutedColor)),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 8),
-              // Calendar Grid (31 days)
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: daysInMonth.map((d) {
-                  final dayNum = d['day'] as int;
-                  final status = d['status'] as String;
-
-                  Color cellBg;
-                  Color cellText;
-
-                  if (status == 'present') {
-                    cellBg = const Color(0xFFDEF7EC);
-                    cellText = const Color(0xFF03543F);
-                  } else if (status == 'absent') {
-                    cellBg = const Color(0xFFFDE8E8);
-                    cellText = const Color(0xFF9B1C1C);
-                  } else if (status == 'late') {
-                    cellBg = const Color(0xFFFEF3C7);
-                    cellText = const Color(0xFF854D0E);
-                  } else if (status == 'holiday') {
-                    cellBg = isDark ? AppColors.darkSunken : const Color(0xFFF1F5F9);
-                    cellText = mutedColor;
-                  } else {
-                    // future
-                    cellBg = isDark ? const Color(0xFF1E1F30) : grade.innerCardBg;
-                    cellText = mutedColor.withOpacity(0.5);
-                  }
-
-                  return Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: cellBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$dayNum',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: cellText,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              // Legend
-              Wrap(
-                spacing: 14,
-                children: [
-                  _buildLegendDot('Present', const Color(0xFF0E9F6E), textColor),
-                  _buildLegendDot('Absent', AppColors.dangerText, textColor),
-                  _buildLegendDot('Late', const Color(0xFFD97706), textColor),
-                  _buildLegendDot('Holiday', mutedColor, textColor),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const TaarroFooter(),
-      ],
-    );
-
-    if (widget.isEmbedded) {
-      return body;
-    }
-
-    return Scaffold(
-      backgroundColor: bg,
-      appBar: AppBar(
-        title: const Text('Attendance Record'),
-        backgroundColor: AppColors.primaryAlt,
-        foregroundColor: Colors.white,
+    final index = widget.children.indexWhere((child) => child['id'].toString() == widget.selectedChildId);
+    final grade = getParentColorGrade(index < 0 ? 0 : index);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final surface = dark ? AppColors.darkSurface : grade.cardBg;
+    final fg = dark ? AppColors.darkInk : grade.textMain;
+    final muted = dark ? AppColors.darkMuted : grade.textMuted;
+    return RefreshIndicator(onRefresh: () async => _reload(), child: ListView(padding: const EdgeInsets.all(18), children: [
+      Text('Attendance', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: fg)),
+      const SizedBox(height: 12),
+      if (widget.children.length > 1) DropdownButtonFormField<String>(
+        value: widget.selectedChildId,
+        decoration: const InputDecoration(labelText: 'Child'),
+        items: [for (final child in widget.children) DropdownMenuItem(value: child['id'].toString(), child: Text(_name(child)))],
+        onChanged: (id) { if (id != null) widget.onChildSelected(id); setState(() => _data = _load()); },
       ),
-      body: body,
-    );
+      const SizedBox(height: 8),
+      Row(children: [
+        IconButton(onPressed: () => setState(() { _month = DateTime(_month.year, _month.month - 1); _data = _load(); }), icon: const Icon(Icons.chevron_left)),
+        Expanded(child: Text('${_monthName(_month.month)} ${_month.year}', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w800, color: fg))),
+        IconButton(onPressed: () => setState(() { _month = DateTime(_month.year, _month.month + 1); _data = _load(); }), icon: const Icon(Icons.chevron_right)),
+      ]),
+      FutureBuilder<List<dynamic>>(
+        future: _data,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
+          if (snapshot.hasError) return _errorCard(errorMessage(snapshot.error!), () => _reload());
+          if (snapshot.data == null || snapshot.data!.length != 3 || snapshot.data![0] is! Map || snapshot.data![1] is! List || snapshot.data![2] is! List) return _errorCard('The server returned invalid attendance data.', () => _reload());
+          final attendance = Map<String, dynamic>.from(snapshot.data![0] as Map);
+          final events = snapshot.data![1] as List;
+          final leaves = snapshot.data![2] as List;
+          final monthDays = attendance['month'] is List ? attendance['month'] as List : const [];
+          final year = attendance['year'] is Map ? Map<String, dynamic>.from(attendance['year'] as Map) : <String, dynamic>{};
+          final percent = year['percent']?.toString();
+          return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Card(color: surface, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('School year summary', style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              Text(percent == null ? 'Attendance percentage unavailable' : '$percent% present', style: TextStyle(color: dark ? AppColors.darkPrimary : grade.accentText, fontSize: 22, fontWeight: FontWeight.w800)),
+              Text('${year['present_days'] ?? '—'} present days / ${year['working_days'] ?? '—'} working days', style: TextStyle(color: muted)),
+            ]))),
+            Card(color: surface, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Days this month', style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              if (monthDays.isEmpty) Text('No attendance days were returned for this month.', style: TextStyle(color: muted))
+              else for (final entry in monthDays.whereType<Map>()) _dayTile(entry, fg, muted),
+            ]))),
+            Card(color: surface, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [Expanded(child: Text('Leave requests', style: TextStyle(color: fg, fontWeight: FontWeight.w700))), FilledButton.tonalIcon(onPressed: _createLeave, icon: const Icon(Icons.add), label: const Text('Request'))]),
+              const SizedBox(height: 6),
+              if (leaves.isEmpty) Text('No leave requests have been returned.', style: TextStyle(color: muted))
+              else for (final item in leaves.whereType<Map>()) _leaveTile(item, fg, muted),
+            ]))),
+            if (events.isNotEmpty) Card(color: surface, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('School calendar', style: TextStyle(color: fg, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              for (final event in events.whereType<Map>()) ListTile(contentPadding: EdgeInsets.zero, title: Text(event['name']?.toString() ?? 'Calendar event', style: TextStyle(color: fg)), subtitle: Text('${event['starts_on'] ?? ''}${event['ends_on'] == event['starts_on'] ? '' : ' – ${event['ends_on'] ?? ''}'}', style: TextStyle(color: muted))),
+            ]))),
+            const SizedBox(height: 22),
+            Center(child: Text('www.taarro.com', style: TextStyle(color: muted, fontSize: 11, letterSpacing: 1.1))),
+          ]);
+        },
+      ),
+    ]));
   }
 
-  Widget _buildLegendDot(String label, Color color, Color textColor) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: textColor)),
-      ],
+  Widget _dayTile(Map day, Color fg, Color muted) => ListTile(
+        contentPadding: EdgeInsets.zero,
+        dense: true,
+        leading: Icon(day['kind']?.toString() == 'holiday' ? Icons.celebration_outlined : Icons.event_available_outlined, size: 20, color: AppColors.primary),
+        title: Text(day['date']?.toString() ?? 'Date unavailable', style: TextStyle(color: fg)),
+        subtitle: Text([day['kind'], day['holiday_name'], if (day['sessions'] is List) (day['sessions'] as List).join(', ')].where((e) => e != null && e.toString().isNotEmpty).join(' · '), style: TextStyle(color: muted)),
+      );
+
+  Widget _leaveTile(Map item, Color fg, Color muted) {
+    final status = item['status']?.toString() ?? 'unknown';
+    final canWithdraw = status == 'pending' && item['withdrawn_at'] == null;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(item['reason']?.toString() ?? 'Leave request', style: TextStyle(color: fg, fontWeight: FontWeight.w600)),
+      subtitle: Text('${item['starts_on'] ?? ''} – ${item['ends_on'] ?? ''} · ${_humanize(status)}', style: TextStyle(color: muted)),
+      trailing: canWithdraw ? TextButton(onPressed: () => _withdraw(item), child: const Text('Withdraw')) : null,
     );
   }
 }
+
+Widget _errorCard(String message, VoidCallback retry) => Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(children: [Text(message, style: const TextStyle(color: AppColors.danger)), TextButton.icon(onPressed: retry, icon: const Icon(Icons.refresh), label: const Text('Retry'))])));
+String _name(Map<String, dynamic> child) => child['full_name']?.toString() ?? child['first_name']?.toString() ?? 'Child';
+String _date(DateTime value) => '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+String _monthName(int month) => const ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][month - 1];
+String _humanize(String value) => value.replaceAll('_', ' ').split(' ').map((part) => part.isEmpty ? part : '${part[0].toUpperCase()}${part.substring(1)}').join(' ');
+String errorMessage(Object error) => error.toString();

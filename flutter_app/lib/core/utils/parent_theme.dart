@@ -27,7 +27,8 @@ class ParentColorGrade {
 }
 
 ParentColorGrade getParentColorGrade(int childIndex) {
-  if (childIndex == 0) {
+  final gradeIndex = childIndex % 4;
+  if (gradeIndex == 0) {
     return const ParentColorGrade(
       screenBg: Color(0xFFEEF4FF),
       cardBg: Color(0xFFD6E4FF),
@@ -39,6 +40,32 @@ ParentColorGrade getParentColorGrade(int childIndex) {
       textMain: Color(0xFF0F294A),
       textMuted: Color(0xFF335C8D),
       heroGradientColors: [Color(0xFF1E3A8A), Color(0xFF312E81), Color(0xFF0F172A)],
+    );
+  } else if (gradeIndex == 2) {
+    return const ParentColorGrade(
+      screenBg: Color(0xFFFFF7ED),
+      cardBg: Color(0xFFFFE6C7),
+      cardBorder: Color(0xFFF7C995),
+      subtleBg: Color(0xFFFFD7A8),
+      innerCardBg: Color(0xFFFFF1DF),
+      accentText: Color(0xFFB45309),
+      accentBg: Color(0xFFD97706),
+      textMain: Color(0xFF542B0A),
+      textMuted: Color(0xFF8A4B16),
+      heroGradientColors: [Color(0xFF92400E), Color(0xFFB45309), Color(0xFF431407)],
+    );
+  } else if (gradeIndex == 3) {
+    return const ParentColorGrade(
+      screenBg: Color(0xFFFFF1F2),
+      cardBg: Color(0xFFFFDCE2),
+      cardBorder: Color(0xFFF8B9C4),
+      subtleBg: Color(0xFFFFC8D2),
+      innerCardBg: Color(0xFFFFEAEE),
+      accentText: Color(0xFFBE123C),
+      accentBg: Color(0xFFE11D48),
+      textMain: Color(0xFF4C0519),
+      textMuted: Color(0xFF881337),
+      heroGradientColors: [Color(0xFF9F1239), Color(0xFFBE123C), Color(0xFF500724)],
     );
   } else {
     return const ParentColorGrade(

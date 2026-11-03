@@ -33,15 +33,38 @@ jobs:
         working-directory: flutter_app
         run: flutter create --platforms=android .
 
-      - name: Patch Android configuration
+      - name: Configure Android network access and SDK
         working-directory: flutter_app
         run: |
-          # Enable cleartext traffic
-          sed -i 's/<application/<application android:usesCleartextTraffic="true"/' android/app/src/main/AndroidManifest.xml
-          # Add internet permission
-          sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET" />' android/app/src/main/AndroidManifest.xml
-          # Set compileSdk to 35
-          sed -i 's/compileSdk = .*/compileSdk = 35/' android/app/build.gradle
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_file = Path("android/app/build.gradle")
+          gradle = gradle_file.read_text()
+          gradle, count = re.subn(
+              r"(?m)^([ \t]*)compileSdk(?:Version)?[ \t]*(?:=[ \t]*)?(?:flutter\.compileSdkVersion|\d+)[ \t]*$",
+              r"\1compileSdkVersion 35",
+              gradle,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not set compileSdk to 35")
+          gradle_file.write_text(gradle)
+
+          manifest_file = Path("android/app/src/main/AndroidManifest.xml")
+          manifest = manifest_file.read_text()
+          if "android.permission.INTERNET" not in manifest:
+              manifest, count = re.subn(
+                  r"(<manifest\b[^>]*>)",
+                  r"\1\n    " + '<uses-permission android:name="android.permission.INTERNET" />',
+                  manifest,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit("Could not add INTERNET permission")
+              manifest_file.write_text(manifest)
+          PY
 
       - name: Install dependencies
         working-directory: flutter_app
@@ -49,10 +72,13 @@ jobs:
 
       - name: Build release APK
         working-directory: flutter_app
-        run: flutter build apk --release
+        run: >-
+          flutter build apk --release
+          --dart-define=API_BASE_URL=https://northfield.200-141-4-40.sslip.io
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: release-apk
           path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
