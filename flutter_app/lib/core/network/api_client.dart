@@ -219,14 +219,57 @@ class ApiClient {
     required String startsOn,
     required String endsOn,
     required String reason,
+    File? document,
   }) {
     final idempotencyKey = '${DateTime.now().microsecondsSinceEpoch}-${id.hashCode}';
-    return request(
-      '/portal/children/${Uri.encodeComponent(id)}/leave-requests',
-      method: 'POST',
-      body: FormData.fromMap({'starts_on': startsOn, 'ends_on': endsOn, 'reason': reason}),
-      headers: {'Idempotency-Key': idempotencyKey},
+    return _createLeaveRequest(
+      id,
+      startsOn: startsOn,
+      endsOn: endsOn,
+      reason: reason,
+      document: document,
+      idempotencyKey: idempotencyKey,
     );
+  }
+
+  Future<dynamic> _createLeaveRequest(
+    String id, {
+    required String startsOn,
+    required String endsOn,
+    required String reason,
+    required String idempotencyKey,
+    File? document,
+  }) async {
+    Future<FormData> createBody() async {
+      final fields = <String, dynamic>{
+        'starts_on': startsOn,
+        'ends_on': endsOn,
+        'reason': reason,
+      };
+      if (document != null) {
+        fields['document'] = await MultipartFile.fromFile(
+          document.path,
+          filename: document.uri.pathSegments.isEmpty ? 'attachment' : document.uri.pathSegments.last,
+        );
+      }
+      return FormData.fromMap(fields);
+    }
+
+    Future<dynamic> send() async => request(
+          '/portal/children/${Uri.encodeComponent(id)}/leave-requests',
+          method: 'POST',
+          body: await createBody(),
+          headers: {'Idempotency-Key': idempotencyKey},
+          retryCsrf: false,
+        );
+
+    try {
+      return await send();
+    } on ApiProblemException catch (error) {
+      if (error.status != 403 || !error.type.endsWith('/csrf-failed')) rethrow;
+      await fetchCsrf();
+      return send();
+    }
   }
 
   Future<dynamic> withdrawLeaveRequest(String studentId, String requestId, int version) => request(

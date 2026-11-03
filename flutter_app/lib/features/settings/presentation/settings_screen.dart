@@ -5,13 +5,15 @@ import '../../../app/providers.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/parent_theme.dart';
-import '../../profile/presentation/profile_screen.dart';
+import '../../../core/widgets/api_loading_skeleton.dart';
+import 'account_pages.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
-  const SettingsScreen({super.key, required this.me, required this.children, required this.onLogout});
+  const SettingsScreen({super.key, required this.me, required this.children, required this.onLogout, required this.onSelectChild});
   final Map<String, dynamic> me;
   final List<Map<String, dynamic>> children;
   final Future<void> Function() onLogout;
+  final ValueChanged<int> onSelectChild;
 
   @override
   ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
@@ -32,66 +34,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _savingTheme = false);
     }
-  }
-
-  Future<void> _emailChange() async {
-    final email = TextEditingController();
-    final password = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final sent = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('Change email'),
-      content: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text('Current email: ${_user['email'] ?? 'Not available'}'),
-        const SizedBox(height: 12),
-        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'New email'), validator: (value) => value == null || !value.contains('@') ? 'Enter a valid email address.' : null),
-        const SizedBox(height: 10),
-        TextFormField(controller: password, obscureText: true, decoration: const InputDecoration(labelText: 'Your password'), validator: (value) => value == null || value.isEmpty ? 'Enter your password.' : null),
-      ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')), FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true); }, child: const Text('Send link'))],
-    ));
-    if (sent == true) {
-      try {
-        await ApiClient.instance.requestEmailChange(email.text, password.text);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Confirmation link sent. Your email changes after you open it.')));
-      } catch (error) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
-    }
-    email.dispose();
-    password.dispose();
-  }
-
-  Future<void> _changePassword() async {
-    final current = TextEditingController();
-    final next = TextEditingController();
-    final confirm = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final submitted = await showDialog<bool>(context: context, builder: (dialogContext) => AlertDialog(
-      title: const Text('Change password'),
-      content: Form(key: formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextFormField(controller: current, obscureText: true, decoration: const InputDecoration(labelText: 'Current password'), validator: (v) => v == null || v.isEmpty ? 'Enter your current password.' : null),
-        const SizedBox(height: 8),
-        TextFormField(controller: next, obscureText: true, decoration: const InputDecoration(labelText: 'New password'), validator: (v) => v == null || v.length < 10 ? 'Use at least 10 characters.' : null),
-        const SizedBox(height: 8),
-        TextFormField(controller: confirm, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm new password'), validator: (v) => v != next.text ? 'Passwords do not match.' : null),
-      ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')), FilledButton(onPressed: () { if (formKey.currentState!.validate()) Navigator.pop(dialogContext, true); }, child: const Text('Update'))],
-    ));
-    if (submitted == true) {
-      try {
-        await ApiClient.instance.changePassword(current.text, next.text);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password updated.')));
-      } catch (error) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
-    }
-    current.dispose();
-    next.dispose();
-    confirm.dispose();
-  }
-
-  Future<void> _push(Widget page) async {
-    await Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => page));
   }
 
   @override
@@ -121,15 +63,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: Text(_childName(widget.children[i])),
             subtitle: Text([widget.children[i]['class_name'], widget.children[i]['section_name']].where((e) => e != null).join(' · ')),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => _push(ProfileScreen(me: widget.me, child: widget.children[i], colorIndex: i)),
+            onTap: () => widget.onSelectChild(i),
           ),
       ]),
       const SizedBox(height: 12),
       _sectionCard('Account', [
-        ListTile(leading: const Icon(Icons.notifications_active_outlined), title: const Text('Alert preferences'), trailing: const Icon(Icons.chevron_right), onTap: () => _push(const AlertPreferencesScreen())),
-        ListTile(leading: const Icon(Icons.contact_mail_outlined), title: const Text('Contact details'), subtitle: Text(_user['email']?.toString() ?? 'Email unavailable'), trailing: const Icon(Icons.chevron_right), onTap: _emailChange),
-        ListTile(leading: const Icon(Icons.lock_outline), title: const Text('Change password'), trailing: const Icon(Icons.chevron_right), onTap: _changePassword),
-        ListTile(leading: const Icon(Icons.devices_outlined), title: const Text('Signed-in devices'), trailing: const Icon(Icons.chevron_right), onTap: () => _push(const SignedInDevicesScreen())),
+        ListTile(leading: const Icon(Icons.notifications_active_outlined), title: const Text('Alert preferences'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AlertPreferencesScreen()))),
+        ListTile(leading: const Icon(Icons.contact_mail_outlined), title: const Text('Contact details'), subtitle: Text(_user['email']?.toString() ?? 'Email unavailable'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ContactDetailsScreen(me: widget.me, studentId: widget.children.first['id'].toString())))),
+        ListTile(leading: const Icon(Icons.lock_outline), title: const Text('Change password'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => ChangePasswordScreen(user: _user)))),
+        ListTile(leading: const Icon(Icons.devices_outlined), title: const Text('Signed-in devices'), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SignedInDevicesScreen()))),
       ]),
       const SizedBox(height: 12),
       _sectionCard('Appearance', [
@@ -172,24 +114,43 @@ class _AlertPreferencesScreenState extends State<AlertPreferencesScreen> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Alert preferences')),
         body: FutureBuilder<dynamic>(future: _future, builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState != ConnectionState.done) return const SingleChildScrollView(padding: EdgeInsets.all(16), child: ApiLoadingSkeleton(variant: 'settings'));
           if (snapshot.hasError) return _pageError(snapshot.error.toString(), () => setState(_load));
           if (snapshot.data is! Map || (snapshot.data as Map)['categories'] is! List) return _pageError('The server returned invalid alert settings.', () => setState(_load));
-          final categories = (snapshot.data as Map)['categories'] as List;
+          final payload = snapshot.data as Map;
+          final categories = payload['categories'] as List;
+          final muted = Theme.of(context).brightness == Brightness.dark ? AppColors.darkMuted : AppColors.muted;
+          final dark = Theme.of(context).brightness == Brightness.dark;
           return ListView(padding: const EdgeInsets.all(16), children: [
-            Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(children: [
+            Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
+              Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(children: [const Expanded(child: SizedBox()), SizedBox(width: 58, child: Text('Push', textAlign: TextAlign.center, style: TextStyle(color: muted))), SizedBox(width: 58, child: Text('Email', textAlign: TextAlign.center, style: TextStyle(color: muted)))])),
               if (categories.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('The server returned no alert categories.')),
-              for (final item in categories.whereType<Map>()) ...[
-                ListTile(title: Text(_humanize(item['category']?.toString() ?? 'Alert')), subtitle: item['locked_on'] == true ? const Text('At least one delivery method must stay on.') : null),
-                SwitchListTile(title: const Text('Push'), value: item['push'] == true, onChanged: item['push'] == true && item['email'] != true ? null : (value) => _save(item['category'].toString(), value, item['email'] == true)),
-                SwitchListTile(title: const Text('Email'), value: item['email'] == true, onChanged: item['email'] == true && item['push'] != true ? null : (value) => _save(item['category'].toString(), item['push'] == true, value)),
-                const Divider(),
-              ],
-              Text('Push devices: ${snapshot.data['push_devices'] ?? 0}', textAlign: TextAlign.left),
+              for (final item in categories.whereType<Map>()) _alertCategoryRow(item, muted),
+              const SizedBox(height: 10),
+              Container(width: double.infinity, padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: dark ? AppColors.darkSky : AppColors.sky, borderRadius: BorderRadius.circular(12)), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.info_outline), const SizedBox(width: 10), Expanded(child: Text('Alerts always appear in the app under the bell. Attendance and fee alerts also need push or email on, so you never miss an absence or a due date.', style: TextStyle(color: dark ? AppColors.darkSkyInk : AppColors.skyInk)))])),
+            ]))),
+            const SizedBox(height: 14),
+            Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Push on this device', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              Text('Registered devices: ${payload['push_devices'] ?? 0}', style: TextStyle(color: muted)),
+              const SizedBox(height: 8),
+              FilledButton.icon(onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This app can save push preferences, but push delivery requires device registration, which is not available in this Flutter build yet.'))), icon: const Icon(Icons.notifications_active_outlined), label: const Text('Turn on push on this device')),
             ]))),
           ]);
         }),
       );
+
+  Widget _alertCategoryRow(Map item, Color muted) {
+    final push = item['push'] == true;
+    final email = item['email'] == true;
+    final category = item['category']?.toString() ?? '';
+    return Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Row(children: [
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(_humanize(category), style: const TextStyle(fontWeight: FontWeight.w700)), if (item['locked_on'] == true) Text('At least one must stay on', style: TextStyle(color: muted, fontSize: 11))])),
+      SizedBox(width: 58, child: Switch(value: push, onChanged: push && !email ? null : (value) => _save(category, value, email))),
+      SizedBox(width: 58, child: Switch(value: email, onChanged: email && !push ? null : (value) => _save(category, push, value))),
+    ]));
+  }
 }
 
 class SignedInDevicesScreen extends StatefulWidget {
@@ -215,7 +176,7 @@ class _SignedInDevicesScreenState extends State<SignedInDevicesScreen> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('Signed-in devices')),
         body: FutureBuilder<dynamic>(future: _future, builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState != ConnectionState.done) return const SingleChildScrollView(padding: EdgeInsets.all(16), child: ApiLoadingSkeleton(variant: 'settings'));
           if (snapshot.hasError) return _pageError(snapshot.error.toString(), () => setState(_load));
           if (snapshot.data is! List) return _pageError('The server returned invalid session data.', () => setState(_load));
           final sessions = snapshot.data as List;

@@ -6,8 +6,10 @@ import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/parent_theme.dart';
 import '../../../core/widgets/app_header.dart';
+import '../../../core/widgets/api_loading_skeleton.dart';
 import '../../profile/presentation/profile_screen.dart';
 import '../../settings/presentation/settings_screen.dart';
+import '../../settings/presentation/account_pages.dart';
 import 'parent_attendance_screen.dart';
 import 'parent_notifications_screen.dart';
 
@@ -23,10 +25,13 @@ class ParentHomeScreen extends ConsumerStatefulWidget {
 class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
   int _tab = 0;
   late String _childId;
+  String? _moreChildId;
   late Future<dynamic> _today;
+  late Future<dynamic> _calendar;
   late Future<dynamic> _unread;
   int _unreadCount = 0;
   String? _unreadError;
+  bool _dismissAlertPrompt = false;
 
   @override
   void initState() {
@@ -44,6 +49,21 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
 
   void _refresh() {
     _today = ApiClient.instance.getTodayAttendance();
+    _calendar = _loadCalendar();
+    _loadUnread();
+  }
+
+  Future<dynamic> _loadCalendar() {
+    final today = DateTime.now();
+    final from = _dateKey(today);
+    final to = _dateKey(today.add(const Duration(days: 90)));
+    return ApiClient.instance.getCalendar(_childId, from, to);
+  }
+
+  String _dateKey(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+
+  void _loadUnread() {
     _unreadError = null;
     _unread = ApiClient.instance.getUnreadCount().then((value) {
       if (mounted) setState(() {
@@ -60,6 +80,10 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
   Map<String, dynamic> get _child => widget.children.firstWhere((item) => item['id'].toString() == _childId, orElse: () => widget.children.first);
 
   void _selectTab(int index) => setState(() => _tab = index);
+
+  void _refreshUnreadCount() {
+    if (mounted) setState(_loadUnread);
+  }
 
   void _openProfile() {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen(me: widget.me, child: _child, colorIndex: widget.children.indexOf(_child))));
@@ -79,13 +103,19 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
     Widget body;
     switch (_tab) {
       case 1:
-        body = ParentAttendanceScreen(children: widget.children, selectedChildId: _childId, onChildSelected: (id) => setState(() => _childId = id));
+        body = ParentAttendanceScreen(children: widget.children, selectedChildId: _childId, onChildSelected: (id) => setState(() {
+          _childId = id;
+          _calendar = _loadCalendar();
+        }));
         break;
       case 2:
-        body = ParentNotificationsScreen();
+        body = ParentNotificationsScreen(onUnreadCountChanged: _refreshUnreadCount);
         break;
       case 3:
-        body = SettingsScreen(me: widget.me, children: widget.children, onLogout: _logout);
+        final childIndex = widget.children.indexWhere((child) => child['id'].toString() == _moreChildId);
+        body = childIndex >= 0
+            ? ProfileScreen(me: widget.me, child: widget.children[childIndex], colorIndex: childIndex, embedded: true, onBack: () => setState(() => _moreChildId = null))
+            : SettingsScreen(me: widget.me, children: widget.children, onLogout: _logout, onSelectChild: (index) => setState(() => _moreChildId = widget.children[index]['id'].toString()));
         break;
       default:
         body = _homeBody(grade);
@@ -133,6 +163,16 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
       child: ListView(padding: const EdgeInsets.fromLTRB(18, 20, 18, 32), children: [
         Text('Home', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: text)),
         if (_unreadError != null) ...[const SizedBox(height: 12), _inlineError(_unreadError!)],
+        if (!_dismissAlertPrompt) ...[
+          const SizedBox(height: 12),
+          Card(color: dark ? AppColors.darkPrimarySoft : AppColors.primarySoft, child: Padding(padding: const EdgeInsets.fromLTRB(14, 12, 6, 12), child: Row(children: [
+            Icon(Icons.notifications_active_outlined, color: dark ? AppColors.darkPrimary : AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Turn on alerts to know when your child is absent', style: TextStyle(color: dark ? AppColors.darkInk : grade.textMain, fontWeight: FontWeight.w700))),
+            TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AlertPreferencesScreen())), child: const Text('Turn on')),
+            IconButton(tooltip: 'Dismiss', onPressed: () => setState(() => _dismissAlertPrompt = true), icon: const Icon(Icons.close_rounded)),
+          ]))),
+        ],
         const SizedBox(height: 14),
         if (widget.children.length > 1) ...[
           SizedBox(height: 46, child: ListView(scrollDirection: Axis.horizontal, children: [
@@ -140,8 +180,12 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
               Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(
                 label: Text(_childName(widget.children[i])),
                 selected: widget.children[i]['id'].toString() == _childId,
-                onSelected: (_) => setState(() => _childId = widget.children[i]['id'].toString()),
+                onSelected: (_) => setState(() {
+                  _childId = widget.children[i]['id'].toString();
+                  _calendar = _loadCalendar();
+                }),
                 selectedColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg,
+                labelStyle: TextStyle(color: dark ? AppColors.darkInk : grade.textMain, fontWeight: FontWeight.w700),
               )),
           ])),
           const SizedBox(height: 14),
@@ -166,7 +210,7 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
           FutureBuilder<dynamic>(
             future: _today,
             builder: (context, snapshot) {
-              if (snapshot.connectionState != ConnectionState.done) return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+              if (snapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'inline');
               if (snapshot.hasError) return _inlineError(errorMessage(snapshot.error!));
               if (snapshot.data is! List) return _inlineError('The server returned invalid attendance data.');
               final matches = (snapshot.data as List).where((entry) => entry is Map && entry['student_id'].toString() == _childId).toList();
@@ -183,9 +227,9 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
           ),
         ]))),
         const SizedBox(height: 12),
+        _schoolCalendarCard(text, muted, surface, dark, grade),
+        const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: _actionCard(context, 'Attendance calendar', Icons.calendar_month_outlined, () => _selectTab(1), grade)),
-          const SizedBox(width: 10),
           Expanded(child: _actionCard(context, 'Leave requests', Icons.edit_calendar_outlined, () => _selectTab(1), grade)),
         ]),
         const SizedBox(height: 24),
@@ -193,6 +237,75 @@ class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
       ]),
     );
   }
+
+  Widget _schoolCalendarCard(Color text, Color muted, Color surface, bool dark, ParentColorGrade grade) => Card(
+        color: surface,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: Text('School calendar', style: TextStyle(fontWeight: FontWeight.w800, color: text))),
+              TextButton(onPressed: () => _selectTab(1), child: const Text('Attendance')),
+            ]),
+            FutureBuilder<dynamic>(
+              future: _calendar,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'inline');
+                if (snapshot.hasError) return _calendarError(errorMessage(snapshot.error!));
+                if (snapshot.data is! List) return _calendarError('The school calendar returned invalid data.');
+                final today = DateTime.now();
+                final events = (snapshot.data as List)
+                    .whereType<Map>()
+                    .where((event) {
+                      final start = DateTime.tryParse(event['starts_on']?.toString() ?? '');
+                      final end = DateTime.tryParse(event['ends_on']?.toString() ?? '');
+                      return start != null && (end == null || !end.isBefore(DateTime(today.year, today.month, today.day)));
+                    })
+                    .toList()
+                  ..sort((a, b) => (a['starts_on']?.toString() ?? '').compareTo(b['starts_on']?.toString() ?? ''));
+                if (events.isEmpty) return Padding(padding: const EdgeInsets.only(bottom: 10), child: Text('No upcoming school calendar events were returned.', style: TextStyle(color: muted)));
+                return Column(children: [
+                  for (final event in events.take(3)) _calendarEventTile(event, text, muted, dark, grade),
+                ]);
+              },
+            ),
+          ]),
+        ),
+      );
+
+  Widget _calendarEventTile(Map event, Color text, Color muted, bool dark, ParentColorGrade grade) {
+    final start = DateTime.tryParse(event['starts_on']?.toString() ?? '');
+    final end = DateTime.tryParse(event['ends_on']?.toString() ?? '');
+    final dateText = start == null
+        ? 'Date unavailable'
+        : end == null || end.year == start.year && end.month == start.month && end.day == start.day
+            ? _calendarDate(start)
+            : '${_calendarDate(start)} – ${_calendarDate(end)}';
+    final kind = event['kind']?.toString() ?? 'Event';
+    final reopensOn = event['reopens_on']?.toString();
+    final description = event['description']?.toString().trim() ?? '';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        radius: 19,
+        backgroundColor: dark ? AppColors.darkPrimarySoft : grade.subtleBg,
+        child: Icon(kind.toLowerCase().contains('holiday') ? Icons.beach_access_outlined : Icons.event_note_outlined, size: 19, color: dark ? AppColors.darkPrimary : grade.accentText),
+      ),
+      title: Text(event['name']?.toString() ?? 'School event', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: text, fontWeight: FontWeight.w700)),
+      subtitle: Text('$dateText${description.isEmpty ? '' : '\n$description'}${reopensOn == null || reopensOn.isEmpty ? '' : '\nSchool reopens ${_calendarDate(DateTime.tryParse(reopensOn) ?? DateTime.now())}'}', maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, height: 1.35)),
+      isThreeLine: description.isNotEmpty || reopensOn != null && reopensOn.isNotEmpty,
+    );
+  }
+
+  String _calendarDate(DateTime date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${date.day} ${months[date.month - 1]}';
+  }
+
+  Widget _calendarError(String message) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _inlineError(message),
+        TextButton.icon(onPressed: () => setState(() => _calendar = _loadCalendar()), icon: const Icon(Icons.refresh), label: const Text('Retry calendar')),
+      ]);
 
   Future<void> _logout() async {
     try {

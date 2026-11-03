@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../core/network/api_client.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/api_loading_skeleton.dart';
 
 class ParentNotificationsScreen extends StatefulWidget {
-  const ParentNotificationsScreen({super.key});
+  const ParentNotificationsScreen({super.key, this.onUnreadCountChanged});
+  final VoidCallback? onUnreadCountChanged;
 
   @override
   State<ParentNotificationsScreen> createState() => _ParentNotificationsScreenState();
@@ -27,6 +29,7 @@ class _ParentNotificationsScreenState extends State<ParentNotificationsScreen> {
     try {
       await ApiClient.instance.markNotificationRead(id);
       _reload();
+      widget.onUnreadCountChanged?.call();
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
     }
@@ -36,6 +39,7 @@ class _ParentNotificationsScreenState extends State<ParentNotificationsScreen> {
     try {
       await ApiClient.instance.markAllNotificationsRead();
       _reload();
+      widget.onUnreadCountChanged?.call();
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString())));
     }
@@ -61,7 +65,7 @@ class _ParentNotificationsScreenState extends State<ParentNotificationsScreen> {
       FutureBuilder<dynamic>(
         future: _notifications,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) return const Padding(padding: EdgeInsets.all(48), child: Center(child: CircularProgressIndicator()));
+          if (snapshot.connectionState != ConnectionState.done) return const ApiLoadingSkeleton(variant: 'list');
           if (snapshot.hasError) return _error(snapshot.error.toString());
           if (snapshot.data is! Map || (snapshot.data as Map)['items'] is! List) return _error('The server returned invalid notification data.');
           final items = (snapshot.data as Map)['items'] as List;

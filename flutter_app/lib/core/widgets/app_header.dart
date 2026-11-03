@@ -24,7 +24,7 @@ class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
   final VoidCallback onOpenProfile;
 
   @override
-  Size get preferredSize => const Size.fromHeight(104);
+  Size get preferredSize => const Size.fromHeight(92);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,7 +38,7 @@ class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
     return Material(
       color: isDark ? AppColors.darkSurface : AppColors.surface,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 5, 10, 7),
+        padding: const EdgeInsets.fromLTRB(16, 3, 8, 4),
         child: Container(
           decoration: BoxDecoration(border: Border(bottom: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.border))),
           child: Column(
@@ -74,14 +74,14 @@ class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
                   ],
                 ),
               ),
-              Divider(height: 7, thickness: 1, color: isDark ? AppColors.darkBorder : AppColors.border.withOpacity(0.7)),
+              Divider(height: 5, thickness: 1, color: isDark ? AppColors.darkBorder : AppColors.border.withOpacity(0.7)),
               SizedBox(
-                height: 48,
+                height: 42,
                 child: Row(
                   children: [
                   Container(
-                    width: 38,
-                    height: 38,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
                       color: isDark ? AppColors.darkPrimarySoft : AppColors.primarySoft,
                       borderRadius: BorderRadius.circular(11),
@@ -90,7 +90,7 @@ class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
                     alignment: Alignment.center,
                     child: Icon(Icons.school_rounded, size: 20, color: isDark ? AppColors.darkPrimary : AppColors.primary),
                   ),
-                  const SizedBox(width: 9),
+                  const SizedBox(width: 7),
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -114,6 +114,8 @@ class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                     tooltip: isDark ? 'Use light theme' : 'Use dark theme',
                     onPressed: () async {
                       final next = isDark ? ThemeMode.light : ThemeMode.dark;
@@ -128,12 +130,16 @@ class AppHeader extends ConsumerWidget implements PreferredSizeWidget {
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                     tooltip: 'Notifications',
                     onPressed: onOpenNotifications,
                     icon: Badge(isLabelVisible: hasUnreadError || unreadCount > 0, label: Text(hasUnreadError ? '!' : unreadCount > 99 ? '99+' : '$unreadCount'), child: Icon(Icons.notifications_none_rounded, size: 20, color: muted)),
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(width: 32, height: 32),
                     tooltip: 'Account',
                     onPressed: onOpenProfile,
                     icon: Icon(Icons.account_circle_rounded, size: 22, color: isDark ? AppColors.darkPrimary : AppColors.primary),
