@@ -17,7 +17,7 @@ class ParentHomeScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> children;
 
   @override
-  State<ParentHomeScreen> createState() => _ParentHomeScreenState();
+  ConsumerState<ParentHomeScreen> createState() => _ParentHomeScreenState();
 }
 
 class _ParentHomeScreenState extends ConsumerState<ParentHomeScreen> {
