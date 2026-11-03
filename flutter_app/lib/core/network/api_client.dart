@@ -163,7 +163,11 @@ class ApiClient {
   }) async {
     final verb = method.toUpperCase();
     final mutating = const {'POST', 'PUT', 'PATCH', 'DELETE'}.contains(verb);
-    if (mutating && _csrfToken == null) await fetchCsrf();
+    // Establish the CSRF cookie before any API call so the token can accompany
+    // every request, including the initial login POST.
+    if (path != '/auth/csrf' && (_csrfToken == null || _csrfToken!.isEmpty)) {
+      await fetchCsrf();
+    }
 
     final uri = _uri(path, queryParams);
     final req = await _httpClient.openUrl(verb, uri).timeout(const Duration(seconds: 30));
@@ -175,11 +179,15 @@ class ApiClient {
     }
     if (mutating) {
       req.headers.set('Origin', Uri.parse(baseUrl).origin);
-      final token = _csrfToken ?? _cookieEndingWith('csrftoken');
-      if (token == null || token.isEmpty) {
+    }
+    final token = _csrfToken ?? _cookieEndingWith('csrftoken');
+    if (path != '/auth/csrf') {
+      if (mutating && (token == null || token.isEmpty)) {
         throw const ApiProblemException(title: 'The school server did not provide a security token. Try again.', type: 'csrf-missing', status: 403);
       }
-      req.headers.set('X-CSRFToken', token);
+      if (token != null && token.isNotEmpty) {
+        req.headers.set('X-CSRFToken', token);
+      }
     }
 
     if (bodyStream != null) {

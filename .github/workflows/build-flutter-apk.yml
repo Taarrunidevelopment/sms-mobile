@@ -33,7 +33,7 @@ jobs:
         working-directory: flutter_app
         run: flutter create --platforms=android .
 
-      - name: Set Android compile SDK
+      - name: Configure Android network access and compile SDK
         working-directory: flutter_app
         run: |
           python3 - <<'PY'
@@ -51,6 +51,20 @@ jobs:
           if replacements != 1:
               raise SystemExit("Could not set compileSdk to 35 in android/app/build.gradle")
           gradle_file.write_text(updated)
+
+          manifest_file = Path("android/app/src/main/AndroidManifest.xml")
+          manifest = manifest_file.read_text()
+          internet_permission = '<uses-permission android:name="android.permission.INTERNET" />'
+          if "android.permission.INTERNET" not in manifest:
+              manifest, insertions = re.subn(
+                  r"(<manifest\b[^>]*>)",
+                  r"\1\n    " + internet_permission,
+                  manifest,
+                  count=1,
+              )
+              if insertions != 1:
+                  raise SystemExit("Could not add INTERNET permission to AndroidManifest.xml")
+              manifest_file.write_text(manifest)
           PY
 
       - name: Install dependencies
